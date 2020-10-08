@@ -2,26 +2,18 @@
 
 # copy binaries in bin/ to jlibrary/bin
 
-cd "`dirname "$0"`"
+. build_common.sh
 
-if [ "`uname -m`" = "armv6l" ] || [ "`uname -m`" = "aarch64" ] || [ "$RASPI" = 1 ]; then
-jplatform="${jplatform:=raspberry}"
-elif [ "`uname`" = "Darwin" ]; then
-jplatform="${jplatform:=darwin}"
-else
-jplatform="${jplatform:=linux}"
-fi
-
-if [ "`uname -m`" = "armv6l" ] || [ "`uname -m`" = "aarch64" ] || [ "$RASPI" = 1 ]; then
+if [ $j64x = arm32 ] || [ $j64x = arm64 ]; then
 
 cp ../bin/${jplatform}/j32/jconsole ../jlibrary/bin32/. || true
-cp ../bin/${jplatform}/j64/jconsole ../jlibrary/bin/. || true
+cp ../bin/${jplatform}/${j64x}/jconsole ../jlibrary/bin/. || true
 
 cp ../bin/${jplatform}/j32/libtsdll.so ../jlibrary/bin32/. || true
-cp ../bin/${jplatform}/j64/libtsdll.so ../jlibrary/bin/. || true
+cp ../bin/${jplatform}/${j64x}/libtsdll.so ../jlibrary/bin/. || true
 
 cp ../bin/${jplatform}/j32/libj.so ../jlibrary/bin32/. || true
-cp ../bin/${jplatform}/j64/libj.so ../jlibrary/bin/. || true
+cp ../bin/${jplatform}/${j64x}/libj.so ../jlibrary/bin/. || true
 
 else
 

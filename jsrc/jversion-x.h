@@ -9,6 +9,8 @@
 #define jplatform "darwin"
 #elif defined(__linux__)
 #define jplatform "linux"
+#elif defined(__FreeBSD__)
+#define jplatform "freebsd"
 #else
 #define jplatform "unknown"
 #endif
