@@ -1,6 +1,6 @@
 #!/bin/sh
 
-. build_common.sh
+. ./build_common.sh
 
 TARGET="${libprefix}tsdll.${libsuffix}"
 

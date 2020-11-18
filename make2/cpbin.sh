@@ -2,7 +2,7 @@
 
 # copy binaries in bin/ to jlibrary/bin
 
-. build_common.sh
+. ./build_common.sh
 
 if [ $j64x = arm32 ] || [ $j64x = arm64 ]; then
 

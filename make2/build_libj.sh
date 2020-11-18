@@ -1,6 +1,6 @@
 #!/bin/sh
 
-. build_common.sh
+. ./build_common.sh
 
 USE_SLEEF_SRC="${USE_SLEEF_SRC:=1}"
 if [ -z "${j64x##*32*}" ]; then

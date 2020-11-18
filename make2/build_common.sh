@@ -99,6 +99,7 @@ common="$OPENMP -fPIC -O2 -fvisibility=hidden -fno-strict-aliasing  \
  -Wno-type-limits \
  -Wno-uninitialized \
  -Wno-unused-parameter \
+ -Wno-return-local-addr \
  -Wno-unused-value "
 else
 # clang

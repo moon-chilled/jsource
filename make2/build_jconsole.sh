@@ -1,6 +1,6 @@
 #!/bin/sh
 
-. build_common.sh
+. ./build_common.sh
 
 TARGET=jconsole$exesuffix
 
