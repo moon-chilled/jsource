@@ -338,15 +338,15 @@ isprist 13!:83 (i. 5 ) <@:+"1 i. 4 5
 isprist 13!:83 'abcda' </. i. 5   NB. w is permuted before use
 isprist 13!:83 'abcda' <@]/. +: i. 5
 isprist 13!:83 'abcda' <@:+:/. i. 5
--. isprist 13!:83 (1 0 0 1 0) <;.1 i. 5  NB. i. 5 is not inplaceable
+isprist 13!:83 (1 0 0 1 0) <;.1 i. 5  NB. i. 5 is not inplaceable but special code does the copy
 isprist 13!:83 (1 0 0 1 0) <;.1 +: i. 5
 -. isprist 13!:83 (1 0 0 1 0) <@];._1 i. 5
 isprist 13!:83 (1 0 0 1 0) <@];._1 +: i. 5
 isprist 13!:83 (1 0 0 1 0) <@:+:;._2 i. 5
--. isprist 13!:83 <;.2 'abcdeabac'   NB. LIT is never inplaceable
+isprist 13!:83 <;.2 'abcdeabac'   NB. LIT is never inplaceable but special code does the copy
 -. isprist 13!:83  <@:];.1 'abcdeabac'
 isprist 13!:83  <@(2&#);.1 'abcdeabac'
--. isprist 13!:83 <;.2 (3 1 4 1 5 9 2 5 3 1)
+isprist 13!:83 <;.2 (3 1 4 1 5 9 2 5 3 1)
 -. isprist 13!:83  <@:];.1 (3 1 4 1 5 9 2 5 3 1)
 isprist 13!:83 <;.2 +: (3 1 4 1 5 9 2 5 3 1)
 isprist 13!:83  <@:];.1 +: (3 1 4 1 5 9 2 5 3 1)
@@ -370,7 +370,7 @@ v3 =: 3 : 0
 +/ y
 )
 gname =: 100 100000 $ 4
-10000 > 7!:2 'v1"1 gname'
+50000 > 7!:2 'v1"1 gname'
 v3 =: 3 : 0
 gname =: 100 100000?@$ 8
 +/ y
@@ -383,5 +383,7 @@ a =: 7!:0 ''
 a =: 7!:0 ''
 1: 3 : 'y =. 6' 5 {. i. 20 20
 a > _1000 + 7!:0 ''
+
+(,<,<0) -: ((}: , 0: each@:{:) each) @: (00"_ each each) ,<,<,<97   NB. used to free block prematurely
 
 4!:55 ;:'a ckprist countis e isprist ispristorunbox isro isvirt o pe t1 totient v1 v2 v3 x y '

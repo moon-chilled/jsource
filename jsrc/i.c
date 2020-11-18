@@ -164,8 +164,10 @@ if(((-1) >> 1) != -1)*(I *)4 = 104;
 #endif
 jt->asgzomblevel = 1;  // allow premature change to zombie names, but not data-dependent errors
 jt->assert = 1;
- RZ(jt->bxa=cstr("+++++++++|-")); jt->bx=CAV(jt->bxa);
- jt->cctdefault=jt->cct= 1.0-FUZZ; jt->fuzz=FUZZ;
+jt->directdef = 1;  // scaf
+// obsolete  RZ(jt->bxa=cstr("+++++++++|-")); jt->bx=CAV(jt->bxa);
+ MC(jt->bx,"+++++++++|-",sizeof(jt->bx));
+ jt->cctdefault=jt->cct= 1.0-FUZZ;
  jt->disp[0]=1; jt->disp[1]=5;
  jt->fcalln=NFCALL;
 #if USECSTACK
@@ -176,10 +178,10 @@ jt->assert = 1;
 #endif
  jt->outmaxafter=222;
  jt->outmaxlen=256;
- strcpy(jt->outseq,"\x0a");
+// obsolete strcpy(jt->outseq,"\x0a");
  strcpy(jt->pp,"%0.6g");
  jt->retcomm=1;
- jt->tostdout=1;
+// obsolete  jt->tostdout=1;
  jt->transposeflag=1;
 // jt->int64rflag=0;
  jt->xmode=XMEXACT;
@@ -201,6 +203,10 @@ jt->assert = 1;
 static C jtjinit3(J jt){S t;
 /* required for jdll and doesn't hurt others */
  gjt=jt; // global jt for JPF debug
+  // init the buffers pointed to by jt
+ jt->etx=malloc(1+NETX);  // error-message buffer
+ jt->callstack=(LS *)malloc(sizeof(LS)*(1+NFCALL));  // function-call stack
+ jt->breakfn=malloc(NPATH); memset(jt->breakfn,0,NPATH);  // place to hold the break filename
  MC(jt->typesizes,typesizes,sizeof(jt->typesizes));  // required for ma.
  MC(jt->typepriority,typepriority,sizeof(jt->typepriority));  // required for ma.  Repeated for each thread in jtinit3
  MC(jt->prioritytype,prioritytype,sizeof(jt->prioritytype));  // required for ma.  Repeated for each thread in jtinit3
@@ -214,16 +220,16 @@ static C jtjinit3(J jt){S t;
  fpsetmask(0);
 #endif
  jt->tssbase=tod();
- jt->thornuni=0;  // init to non-unicode (normal) state
- jt->jprx=0;      // init to non jprx jconsole output (normal) state
+// obsolete  jt->prxthornuni=0;  // init to non-unicode (normal) state
+// obsolete  jt->jprx=0;      // init to non jprx jconsole output (normal) state
  meminit();
  sesminit();
  evinit();
  consinit();
+ xsinit();  // must be before symbinit
  symbinit();  // must be after consinit
  parseinit();
  xoinit();
- xsinit();
  sbtypeinit();
  rnginit();
 // #if (SYS & SYS_DOS+SYS_MACINTOSH+SYS_UNIX)

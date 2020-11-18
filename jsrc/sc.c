@@ -18,7 +18,7 @@ DF2(jtunquote){A z;
  I callstackx=jt->callstacknext; // Remember where our stack frame starts.  We may add an entry; execution may add more
  A thisname=v->fgh[0]; A fs; A explocale; L *stabent;// the A block for the name of the function (holding an NM) - unless it's a pseudo-name   fs is the 'named' function itself  explocale=explicit locale if any stabent=symbol-table entry if any
  A savname=jt->curname;  // we stack the executing name
- if(thisname){
+ if(likely(thisname!=0)){  // normal names
   jt->curname=thisname;  // set failing name before we have value errors
   // normal path for named functions
   if(AM(self)==jt->modifiercounter&&v->localuse.lvp[0]){
@@ -30,13 +30,13 @@ DF2(jtunquote){A z;
    NM* thisnameinfo=NAV(thisname);  // the NM block for the current name
    if(!(thisnameinfo->flag&(NMLOC|NMILOC|NMIMPLOC))) {  // simple name, and not u./v.
     explocale=0;  // flag no explicit locale
-    if(!(stabent = probelocal(thisname)))stabent=syrd1(thisnameinfo->m,thisnameinfo->s,thisnameinfo->hash,jt->global);  // Try local, then look up the name starting in jt->global
+    if(!(stabent = probelocal(thisname,jt->locsyms)))stabent=syrd1(thisnameinfo->m,thisnameinfo->s,thisnameinfo->hash,jt->global);  // Try local, then look up the name starting in jt->global
    } else {  // locative or u/v
     if(!(thisnameinfo->flag&NMIMPLOC)){  // locative
      RZ(explocale=sybaseloc(thisname));  //  get the explicit locale.  0 if erroneous locale
      stabent=syrd1(thisnameinfo->m,thisnameinfo->s,thisnameinfo->hash,explocale);  // Look up the name starting in the locale of the locative
     }else{  // u./v.  We have to look at the assigned name/value to know whether this is an implied locative (it usually is)
-     if(stabent = probelocal(thisname)){
+     if(stabent = probelocal(thisname,jt->locsyms)){
       // u/v, assigned by xdefn.  Implied locative.  Use switching to the local table as a flag for restoring the caller's environment
       explocale=jt->locsyms;  // We have to use this flag trick, rather than stacking the locales here, because errors after the stack is set could corrupt the stack
      }
@@ -70,9 +70,9 @@ DF2(jtunquote){A z;
  FDEPINC(d);  // verify sufficient stack space - NO ERRORS until FDEPDEC below
 #endif
  STACKCHKOFL
- if(explocale){  // there is a locative or implied locative
+ if(unlikely(explocale!=0)){  // there is a locative or implied locative
   // locative. switch to it, stacking the prev value.  If the switch is to the current local symbol table, that means 'switch to caller's environment'
-  if(explocale==jt->locsyms){
+  if(unlikely(explocale==jt->locsyms)){
    pushcallstack1d(CALLSTACKPUSHLOCALSYMS,jt->locsyms);  // save current locsyms
    jt->locsyms=(A)AM(jt->locsyms);  // get the local syms at the time u/v was assigned; make them current.  Leave GST unchanged in it
    explocale=AKGST(jt->locsyms);  // fetch global syms for the caller's environment, so we stack it next
@@ -84,7 +84,7 @@ DF2(jtunquote){A z;
  w=dyadex?w:(A)fs;  // set up the bivalent argument with the new self, since fs may have been changed
 
  // Execute the name.  First check 4 flags at once to see if anything special is afoot
- if(!(jt->uflags.ui4|(v->flag&VLOCK))) {
+ if(likely(!(jt->uflags.ui4|(v->flag&VLOCK)))) {
   // No special processing. Just run the entity
   // We have to raise the usecount, in case the name is deleted while running.  But that will be very rare.  Plus, we know that the executable type is recursive and non-inplaceable.
   // So, all we have to do is increment the usecount.  If it's a PERMANENT symbol no harm will be done, since we decrement below
@@ -95,18 +95,19 @@ DF2(jtunquote){A z;
   // Recursion through $: does not go higher than the name it was defined in.  We make this happen by pushing the name onto the $: stack
   A s=jt->sf; jt->sf=fs; z=(*actionfn)((J)(((REPSGN(SGNIF(v->flag,dyadex+VJTFLGOK1X)))|~JTFLAGMSK)&(I)jtinplace),a,w,fs); jt->sf=s;  // keep all flags in jtinplace
   // Undo the protection.  If, most unusually, the usecount goes to 0, back up and do the full recursive decrement
-  if(--AC(fs)<=0){++AC(fs); fa(fs);}
+  if(unlikely(--AC(fs)<=0)){++AC(fs); fa(fs);}
  } else {
   // Extra processing is required.  Check each option individually
   if(PMCTRBPMON&jt->uflags.us.uq.uq_c.pmctrbstk)pmrecord(thisname,jt->global?LOCNAME(jt->global):0,-1L,dyadex?VAL2:VAL1);  // Record the call to the name, if perf monitoring on
   // If we are required to insert a marker for each call, do so (if it hasn't been done already).  But not for pseudo-named functions
   if(stabent!=0 && jt->uflags.us.uq.uq_c.pmctrbstk&PMCTRBSTKREQD && callstackx==jt->callstacknext){pushcallstack1d(CALLSTACKPOPLOCALE,jt->global);}  //  If cocurrent is about, make every call visible
   if(jt->uflags.us.cx.cx_c.db&&!(jt->uflags.us.cx.cx_c.glock||VLOCK&v->flag)&&jt->recurstate<RECSTATEPROMPT){  // The verb is locked if it is marked as locked, or if the script is locked; if recursive JDo, can't enter debug suspension so ignore debug
-   jt->cursymb=stabent; z=dbunquote(dyadex?a:0,dyadex?w:a,fs);  // if debugging, go do that.  save last sym lookup as debug parm
+// obsolete    jt->cursymb=stabent;
+   z=dbunquote(dyadex?a:0,dyadex?w:a,fs,stabent);  // if debugging, go do that.  save last sym lookup as debug parm
   }else{
    ra(fs);  // should assert recursive usecount
    A s=jt->sf; jt->sf=fs; z=v->valencefns[dyadex]((J)(((REPSGN(SGNIF(v->flag,dyadex+VJTFLGOK1X)))|~JTFLAGMSK)&(I)jtinplace),a,w,fs); jt->sf=s;
-   fa(fs);
+   fa(fs); 
   }
   if(PMCTRBPMON&jt->uflags.us.uq.uq_c.pmctrbstk)pmrecord(thisname,jt->global?LOCNAME(jt->global):0,-2L,dyadex?VAL2:VAL1);  // record the return from call
   if(jt->uflags.us.uq.uq_c.spfreeneeded)spfree();   // if garbage collection required, do it
@@ -118,9 +119,10 @@ DF2(jtunquote){A z;
  // Now pop the stack.  Execution may have added entries, but our stack frame always starts in the same place.
  // We may add entries to the end of the caller's stack frame
  jt->curname=savname;  // restore the executing name
- if(callstackx!=jt->callstacknext){  // normal case, with no stack, bypasses all this
+ if(unlikely(callstackx!=jt->callstacknext)){  // normal case, with no stack, bypasses all this
   // There are stack entries.  Process them
-  if(jt->callstack[callstackx].type==CALLSTACKPOPLOCALE && callstackx+1==jt->callstacknext) {
+// obsolete   if(likely(jt->callstack[callstackx].type==CALLSTACKPOPLOCALE && callstackx+1==jt->callstacknext)) {
+  if(likely(((jt->callstack[callstackx].type^CALLSTACKPOPLOCALE) | ((callstackx+1)^jt->callstacknext))==0)) {   // jt->callstack[callstackx].type==CALLSTACKPOPLOCALE && callstackx+1==jt->callstacknext
    // The only thing on the stack is a simple POP.  Do the pop.  This & the previous case account for almost all the calls here
    SYMSETGLOBAL(jt->locsyms,jt->callstack[callstackx].value);  // restore global locale
    jt->callstacknext=(I4)callstackx;  // restore stackpointer for caller
@@ -213,15 +215,15 @@ A jtnamerefacv(J jt, A a, L* w){A y;V*v;
 // For a noun, the reference points to the data, and has rank/shape info
 // For other types, we build a function ref to 'name~', and fill in the type, rank, and a pointer to the name;
 //  the name will be dereferenced when the function is executed
-F1(jtnameref){
- RZ(w);
- R namerefacv(w,syrd(w));  // get the symbol-table slot for the name (don't store the locale-name); return its 'value'
+A jtnameref(J jt,A w,A locsyms){
+ ARGCHK1(w);
+ R namerefacv(w,syrd(w,locsyms));  // get the symbol-table slot for the name (don't store the locale-name); return its 'value'
 }    /* argument assumed to be a NAME */
 
 // Create a pseudo-named entity.  a is the name, w is the actual entity
 // Result has type ':' but goes to unquote.  We mark a pseudo-named entity by having f=0, g=name, h=actual entity to execute
 F2(jtnamerefop){V*v;
- RZ(a&&w);
+ ARGCHK2(a,w);
  v=FAV(w);
  R fdef(0,CCOLON,VERB,  jtunquote1,jtunquote, 0L,a,w, VXOPCALL|v->flag, v->mr,lrv(v),rrv(v));
 }    

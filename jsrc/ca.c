@@ -16,7 +16,7 @@ static DF1(jtonf1){PROLOG(0021);DECLFG;A z;I flag=sv->flag,m=jt->xmode;
 }
 
 static DF2(jtuponf2){PROLOG(0022);DECLFG;A z;I flag=sv->flag,m=jt->xmode;
- RZ(a&&w);
+ ARGCHK2(a,w);
  if(primitive(gs))if(flag&VFLR)jt->xmode=XMFLR; else if(flag&VCEIL)jt->xmode=XMCEIL;
  if(RAT&AT(a))RZ(a=pcvt(XNUM,a));
  if(RAT&AT(w))RZ(w=pcvt(XNUM,w));
@@ -76,8 +76,9 @@ static DF1(jtmodpow1){A g=FAV(self)->fgh[1]; R rank2ex0(FAV(g)->fgh[0],w,self,jt
 // u@v and u@:v
 // TODO: no  need for protw checking?
 CS1IP(,on1, \
-{PUSHZOMB; A protw = (A)(intptr_t)((I)w+((I)jtinplace&JTINPLACEW)); \
+{PUSHZOMB; ARGCHK1D(w); A protw = (A)(intptr_t)((I)w+((I)jtinplace&JTINPLACEW)); \
 A gx; RZ(gx=(g1)((J)(intptr_t)(((I)jtinplace&(~(JTWILLBEOPENED+JTCOUNTITEMS))) + (REPSGN(SGNIF(FAV(gs)->flag,VJTFLGOK1X)) & FAV(fs)->flag2 & VF2WILLOPEN1+VF2USESITEMCOUNT1)),w,gs));  /* inplace g.  Copy WILLOPEN from f to WILLBEOPENED for g  jtinplace is set for g */ \
+ARGCHK1D(gx) \
 /* inplace gx unless it is protected */ \
 POPZOMB; \
 jtinplace=(J)(intptr_t)(((I)jtinplace&~(JTINPLACEW))+((I )(gx!=protw)*JTINPLACEW));  \
@@ -86,8 +87,9 @@ RZ(z=(f1)(jtinplace,gx,fs));} \
 ,0113)
 
 CS2IP(,,jtupon2, \
-{PUSHZOMB; A protw = (A)(intptr_t)((I)w+((I)jtinplace&JTINPLACEW)); A prota = (A)(intptr_t)((I)a+((I)jtinplace&JTINPLACEA)); A gx; \
+{PUSHZOMB; ARGCHK2D(a,w) A protw = (A)(intptr_t)((I)w+((I)jtinplace&JTINPLACEW)); A prota = (A)(intptr_t)((I)a+((I)jtinplace&JTINPLACEA)); A gx; \
 RZ(gx=(g2)((J)(intptr_t)(((I)jtinplace&(~(JTWILLBEOPENED+JTCOUNTITEMS))) + (REPSGN(SGNIF(FAV(gs)->flag,VJTFLGOK2X)) & FAV(fs)->flag2 & VF2WILLOPEN1+VF2USESITEMCOUNT1)),a,w,gs));  /* inplace g */ \
+ARGCHK1D(gx) \
 /* inplace gx unless it is protected */ \
 POPZOMB; jtinplace=(J)(intptr_t)(((I)jtinplace&~(JTINPLACEW))+(((I )(gx!=prota)&(I )(gx!=protw))*JTINPLACEW));  \
 jtinplace=FAV(fs)->flag&VJTFLGOK1?jtinplace:jt; \
@@ -114,18 +116,20 @@ CS2IP(static,static,on2, \
  /* here for execution on a single cell */ \
  A protw = (A)(intptr_t)((I)w+((I)jtinplace&JTINPLACEW)); A prota = (A)(intptr_t)((I)a+((I)jtinplace&JTINPLACEA)); \
  /* take inplaceability of each monad from the corresponding dyad argument */ \
- RZ(gw=(g1)((J)(intptr_t)((I)jtinplace&~(JTINPLACEA+JTWILLBEOPENED+JTCOUNTITEMS)),w,gs)); \
- RZ(ga=(g1)((J)(intptr_t)((I)jt+(((I)jtinplace>>JTINPLACEAX)&JTINPLACEW)),a,gs));  /* Move bit 1 to bit 0, clear bit 1 */ \
+ RZ(gw=(g1)(JTIPWonly,w,gs)); \
+ RZ(ga=(g1)(JTIPAtoW,a,gs));  /* Move bit 1 to bit 0, clear bit 1 */ \
  POPZOMB; jtinplace=(J)(intptr_t)(((I)jtinplace&~(JTINPLACEA+JTINPLACEW))+(I )(ga!=prota)*JTINPLACEA+(I )(gw!=protw)*JTINPLACEW); jtinplace=FAV(fs)->flag&VJTFLGOK2?jtinplace:jt; \
  RZ(z=(f2)(jtinplace,ga,gw,fs)); \
 ,0023)
 static DF2(on20){R jtrank2ex0(jt,a,w,self,on2cell);}  // pass inplaceability through
 
 static DF2(atcomp){AF f;A z;
- RZ(a&&w); 
+ ARGCHK2(a,w); 
  f=atcompf(a,w,self);
+ I postflags=(I)f&3;  // extract postprocessing from return
+ f=(AF)((I)f&-4);    // restore function address
  if(f){
-  I postflags=jt->workareas.compsc.postflags;
+// obsolete   I postflags=jt->workareas.compsc.postflags;
   z=f(jt,a,w,self);
   if(z){if(postflags&2){z=num((IAV(z)[0]!=AN(AR(a)>=AR(w)?a:w))^(postflags&1));}}
  }else z=upon2(a,w,self);
@@ -133,11 +137,13 @@ static DF2(atcomp){AF f;A z;
 }
 
 static DF2(atcomp0){A z;AF f;
- RZ(a&&w);
+ ARGCHK2(a,w);
  f=atcompf(a,w,self);
+ I postflags=(I)f&3;  // extract postprocessing from return
+ f=(AF)((I)f&-4);    // restore function address
  PUSHCCT(1.0)
  if(f){
-  I postflags=jt->workareas.compsc.postflags;
+// obsolete   I postflags=jt->workareas.compsc.postflags;
   z=f(jt,a,w,self);
   if(z){if(postflags&2){z=num((IAV(z)[0]!=AN(AR(a)>=AR(w)?a:w))^(postflags&1));}}
  }else z=upon2(a,w,self);
@@ -326,14 +332,14 @@ F2(jtatco){A f,g;AF f1=on1cell,f2=jtupon2cell;C c,d,e;I flag, flag2=0,m=-1;V*av,
 }
 
 // u&:v
-F2(jtampco){AF f1=on1cell;C c,d;I flag,flag2=0;V*wv;
+F2(jtampco){AF f1=on1cell,f2=on2cell;C c,d;I flag,flag2=0,linktype=0;V*wv;
  ASSERTVV(a,w);
  c=ID(a); wv=FAV(w); d=wv->id;  // c=pseudochar for u, d=pseudochar for v
  // Set flag wfith ASGSAFE status from f/g; keep INPLACE? in sync with f1,f2.  Inplace only if monad v can handle it
  flag = ((FAV(a)->flag&wv->flag)&VASGSAFE)+((wv->flag&VJTFLGOK1)*((VJTFLGOK2+VJTFLGOK1)/VJTFLGOK1));
  if(c==CBOX){flag2 |= VF2BOXATOP1;}  // mark this as <@f - monad only
- else if(BOTHEQ8(c,d,CSLASH,CCOMMA))         {f1=jtredravel; }
- else if(BOTHEQ8(c,d,CRAZE,CCUT)&&boxatop(w)){  // w is <@g;.k    detect ;&:(<@(f/\));._2 _1 1 2
+ else if(BOTHEQ8(c,d,CSLASH,CCOMMA)){f1=jtredravel;}    // f/&:, y
+ else if(BOTHEQ8(c,d,CRAZE,CCUT)&&boxatop(w)){  // w is <@g;.k    detect ;&:(<@(f/\));._2 _1 1 2 y
   if((((I)1)<<(wv->localuse.lI+3))&0x36) { // fetch k (cut type); bits are 3 2 1 0 _1 _2 _3; is 1/2-cut?
    A wf=wv->fgh[0]; V *wfv=FAV(wf); A g=wfv->fgh[1]; V *gv=FAV(g);  // w is <@g;.k  find g
    if((gv->id&~(CBSLASH^CBSDOT))==CBSLASH) {  // g is gf\ or gf\.
@@ -344,14 +350,16 @@ F2(jtampco){AF f1=on1cell;C c,d;I flag,flag2=0;V*wv;
    }
   }
  }
- else if(BOTHEQ8(c,d,CGRADE,CGRADE))         {f1=jtranking;  flag&=~VJTFLGOK1;flag+=VIRS1;}
+ else if(BOTHEQ8(c,d,CGRADE,CGRADE)){f1=jtranking;  flag&=~VJTFLGOK1;flag+=VIRS1;}  // /:&:/: monad
+ else if(BOTHEQ8(c,d,CCOMMA,CBOX)){f2=jtlink; linktype=ACINPLACE;}  // x ,&< y   supports IP 
 
  // Copy the monad open/raze status from v into u&:v
  flag2 |= wv->flag2&(VF2WILLOPEN1|VF2USESITEMCOUNT1);
 
  // Install the flags to indicate that this function starts out with a rank loop, and thus can be subsumed into a higher rank loop
  flag2|=(f1==on1cell)<<VF2RANKATOP1X;  flag2|=VF2RANKATOP2; 
- R fdef(flag2,CAMPCO,VERB, f1,on2cell, a,w,0L, flag, RMAX,RMAX,RMAX);
+ A z; RZ(z=fdef(flag2,CAMPCO,VERB, f1,f2, a,w,0L, flag, RMAX,RMAX,RMAX));
+ FAV(z)->localuse.lclr[0]=linktype; R z;
 }
 
 // m&v and u&n.  Never inplace the noun argument, since the verb may
@@ -382,8 +390,8 @@ static DF1(ixfixedright0){A z;V*v=FAV(self);
 static DF2(with2){A z; R df1(z,w,powop(self,a,0));}
 
 // u&v
-F2(jtamp){A h=0;AF f1,f2;B b;C c,d=0;I flag,flag2=0,mode=-1,p,r;V*u,*v;
- RZ(a&&w);
+F2(jtamp){A h=0;AF f1,f2;B b;C c,d=0;I flag,flag2=0,linktype=0,mode=-1,p,r;V*u,*v;
+ ARGCHK2(a,w);
  switch(CONJCASE(a,w)){
  default: ASSERTSYS(0,"amp");
  case NN: ASSERT(0,EVDOMAIN);
@@ -448,10 +456,11 @@ F2(jtamp){A h=0;AF f1,f2;B b;C c,d=0;I flag,flag2=0,mode=-1,p,r;V*u,*v;
   }
   switch(ID(a)){   // if we matched the a.&i. code above, a must be a. and its ID will be 0
   case CBOX:   flag |= VF2BOXATOP1; break;  // mark this as <@f for the monad
-  case CGRADE: if(c==CGRADE){f1=jtranking; flag+=VIRS1; flag&=~VJTFLGOK1;} break;
-  case CSLASH: if(c==CCOMMA){f1=jtredravel; } break;
-  case CCEIL:  f1=jtonf1; flag+=VCEIL; flag&=~VJTFLGOK1; break;
-  case CFLOOR: f1=jtonf1; flag+=VFLR; flag&=~VJTFLGOK1; break;
+  case CGRADE: if(c==CGRADE){f1=jtranking; flag+=VIRS1; flag&=~VJTFLGOK1;} break;  // /:&/: y
+  case CSLASH: if(c==CCOMMA){f1=jtredravel; } break;   // f/&, y
+  case CCOMMA: if(c==CBOX){f2=jtlink; linktype=ACINPLACE;} break;  // x ,&< y   supports IP 
+  case CCEIL:  f1=jtonf1; flag+=VCEIL; flag&=~VJTFLGOK1; break;  // >.@g
+  case CFLOOR: f1=jtonf1; flag+=VFLR; flag&=~VJTFLGOK1; break;   // <.@g
   case CRAZE:  // detect ;@(<@(f/\));.
    if(c==CCUT&&boxatop(w)){  // w is <@g;.k
     if((((I)1)<<(v->localuse.lI+3))&0x36) { // fetch k (cut type); bits are 3 2 1 0 _1 _2 _3; is 1/2-cut?
@@ -476,6 +485,7 @@ F2(jtamp){A h=0;AF f1,f2;B b;C c,d=0;I flag,flag2=0,mode=-1,p,r;V*u,*v;
  // Even though we don't test for infinite, allow this node to be flagged as rankloop so it can combine with others
   if(f1==on1){flag2|=VF2RANKATOP1; if(r==RMAX)f1=on1cell; else{if(r==0)f1=jton10;}}
   if(f2==on2){flag2|=VF2RANKATOP2; if(r==RMAX)f2=on2cell; else{if(r==0)f2=on20;}}
-  R fdef(flag2,CAMP,VERB, f1,f2, a,w,0L, flag, r,r,r);
+  A z; RZ(z=fdef(flag2,CAMP,VERB, f1,f2, a,w,0L, flag, r,r,r));
+  FAV(z)->localuse.lclr[0]=linktype; R z;
  }
 }

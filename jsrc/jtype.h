@@ -66,7 +66,7 @@ typedef UI4                RANK2T;  // 2 ranks, (l<<16)|r
 #define RANK2TX            32   // # bits in a RANK2T
 #define RANK2TMSK           0xFFFFFFFFU
 typedef I                  FLAGT;
-typedef UI4                LX;  // index of an L block in jt->sympv
+typedef UI4                LX;  // index of an L block in LAV0(jt->symp)
 
 typedef struct AD AD;
 typedef AD *A;
@@ -76,6 +76,21 @@ typedef AD *A;
 #define JTINPLACEW      (((I)1)<<JTINPLACEWX)
 #define JTINPLACEAX     1   // turn this on in jt to indicate that a can be inplaced.  Must be 1+JTINPLACEWX
 #define JTINPLACEA      (((I)1)<<JTINPLACEAX)
+// following bit is used on input to jtcvt only
+#define JTNOFUZZX       1   // comparison on legal float conversion should be exact
+#define JTNOFUZZ        (((I)1)<<JTNOFUZZX)
+// following bit is used inside jtlrep only
+#define JTPARENSX       1   // create fully parenthesized output
+#define JTPARENS        (((I)1)<<JTPARENSX)
+// following bits are passed into jpr/jpr1/immex/immea/showerr/wri
+#define JTPRTYO         7  // output class, see MTYO*
+#define JTPRNOSTDOUTX   3   // set to suppress typing sentence result on stdout (as in scripts)
+#define JTPRNOSTDOUT    (((I)1)<<JTPRNOSTDOUTX)
+// following bit is used in sort/grade to indicate sort direction
+#define JTDESCENDX      2   // direction of sort
+#define JTDESCEND       (((I)1)<<JTDESCENDX)
+
+
 // Next flag must match result.h and VF2 flags, and must be above ZZFLAGBOXATOP
 #define JTWILLBEOPENEDX 4   // result of this exec will be opened immediately, so it can contain virtual references to an input to the current verb
      // Note: this flag MUST NOT equal BOX, or BOX<<1, or 1 or 2
@@ -106,7 +121,8 @@ struct AD {
         // holding the amend offsets in x u} y, the number of axes of y that are built into the indexes in u (5) for name references, the value of jt->modifiercount when the name was last looked up
         // (6) in the return from wordil, holds the number of words if any final NB. is discarded; (7) in the result of indexofsub when called for FORKEY, contains the
         // number of partitions found; (8) in the self block for y L: n and u S: n, the address of the fs block for u; (9) in the call to jtisf (multiple assignment), holds the
-        // address of the symbol table being assigned to
+        // address of the symbol table being assigned to (10) in the y block internal to pv.c, used for flags (11) in hashtables in x15.c and in tickers, the number of entries that have been hashed
+        // (12) in the faux arg to fixa, pointer to the recursive name-list block (13) in file-lock list and file-number list, the # valid files
   A back; // For VIRTUAL blocks, points to backing block
   A *zaploc;  // For all blocks, AM initially holds a pointer to the place in the tpop stack (or hijacked tpop stack) that points back to the allocated block.  This value is guaranteed
         // to remain valid as long as the block is nonvirtual inplaceable and might possibly return as a result to the parser or result assembly  (in cases under m above, the block cannot become such a result)
@@ -189,6 +205,8 @@ typedef I SI;
 #define AV(x)           ( (I*)((C*)(x)+AK(x)))  /* pointer to ravel        */
 #define BAV(x)          (      (B*)(x)+AK(x) )  /* boolean                 */
 #define CAV(x)          (      (C*)(x)+AK(x) )  /* character               */
+#define CAV1(x)         (((C*)(x)+AKXR(1)))  // character in non-virtual rank-1 array
+#define CAV2(x)         (((C*)(x)+AKXR(2)))  // character in non-virtual rank-2 array
 #define UCAV(x)         (     (UC*)(x)+AK(x) )  /* unsigned character      */
 #define USAV(x)         ((US*)((C*)(x)+AK(x)))  /* wchar                   */
 #define UAV(x)          (     (UC*)(x)+AK(x) )  /* unsigned character      */
@@ -198,9 +216,11 @@ typedef I SI;
 #define NAV(x)          ((NM*)((C*)(x)+AKXR(1)))  // name, which is always allocated as rank 1, for some reason
 #define IAV(x)          AV(x)                   /* integer                 */
 #define IAV0(x)         ((I*)((C*)(x)+AKXR(0)))  // integer in a stack- or heap-allocated atom (rank 0 - used for internal tables)
-#define IAV1(x)         ((I*)((C*)(x)+AKXR(1)))  // integer in a stack- or heap-allocated list (rank 1)
+#define IAV1(x)         ((I*)((C*)(x)+AKXR(1)))  // integer in a stack- or heap-allocated list (rank 1 - used for internal tables that need alignment or need AS[0])
+#define IAV2(x)         ((I*)((C*)(x)+AKXR(2)))  // integer in a stack- or heap-allocated list (rank 2)
 #define BAV0(x)         ( (C*)((C*)(x)+AKXR(0)) )  // Boolean when rank is 0 - fixed position (known to avoid segfault)
-#define LXAV0(x)        ( (LX*)((C*)(x)+AKXR(0)) )  // Symbol when rank is 0 - fixed position (for SYMB tables).  Note AK() is used in SYMB tables
+#define LXAV0(x)        ( (LX*)((C*)(x)+AKXR(0)) )  // Symbol when rank is 0 - fixed position (for SYMB hash tables).  Note AK() is used in SYMB tables
+#define LAV0(x)         ( (L*)((C*)(x)+AKXR(0)) )  // Symbol array when rank is 0 - used for the symbol pool
 #define DAV(x)          ( (D*)((C*)(x)+AK(x)))  /* double                  */
 #define DAV0(x)         ( (D*)((C*)(x)+AKXR(0)))  // double atom
 #define DAV2(x)         ( (D*)((C*)(x)+AKXR(2)) )  // Double when rank is 2 - fixed position (for matrix inversion)
@@ -208,13 +228,15 @@ typedef I SI;
 #define XAV(x)          ( (X*)((C*)(x)+AK(x)))  /* extended                */
 #define QAV(x)          ( (Q*)((C*)(x)+AK(x)))  /* rational                */
 #define AAV(x)          ( (A*)((C*)(x)+AK(x)))  /* boxed                   */
+#define AAV0(x)         ((A*)((C*)(x)+AKXR(0)))  // A block in a stack- or heap-allocated atom (rank 0 - used for internal tables)
+#define AAV1(x)         ((A*)((C*)(x)+AKXR(1)))  // A block in a stack- or heap-allocated list (rank 1)
 #define VAV(x)          ( (V*)((C*)(x)+AK(x)))  /* verb, adverb, conj      */
 #define FAV(x)          ( (V*)((C*)(x)+AKXR(0)) )  // verb, adverb, conj - always at fixed offset
 #define PAV(x)          ( (P*)((C*)(x)+AK(x)))  /* sparse                  */
 #define SBAV(x)         ((SB*)((C*)(x)+AK(x)))  /* symbol                  */
+#define SBUV4(x)        ((SBU*)((C*)(x)+AKXR(4)))  // symbol, nonvirtual rank 4
 #define voidAV(x)       ((void*)((C*)(x)+AK(x)))  // unknown
 
-#define AAV0(w) AAV(w)[0]
 #if C_LE
 #define BIV0(w) (IAV(w)[0]&(1-((AT(w)&INT)>>(INTX-1))))  // the first (presumably only) value in w, when w is an INT or B01 type
 #endif
@@ -330,7 +352,8 @@ typedef I SI;
 #define ASGN            ((I)1L<<ASGNX)     /* I  assignment                   */
 #define ASGNSIZE sizeof(I)     // only 1 byte, but all non-DIRECT are fullword multiples
 // ** ASGN type can have the following informational bits set along with ASGN
-#define ASGNLOCAL       ((I)1L<<SYMBX)     // set for =. (but not when assigning to locative)    aliases with SYMB
+#define ASGNLOCALX      SYMBX     // set for =. (but not when assigning to locative)    aliases with SYMB
+#define ASGNLOCAL       ((I)1L<<ASGNLOCALX)     // set for =. (but not when assigning to locative)    aliases with SYMB
 #define ASGNTONAME      ((I)1L<<CONWX)     // set when assignment is to name    aliases with CONW
 // NOTE: The parser assumes that CONW always means ASGNTONAME, so don't use it in any parseable type (such as NAME, NOUN)
 // ** NOUN types can have the following informational bits set
@@ -348,7 +371,7 @@ typedef I SI;
 #define XCVTXNUMCV      ((I)3<<XCVTXNUMCVX)  // in cvt(), the precision for xnum (if XCVTXNUMORIDE is set)
 // ** ADV type can have the following information flag set
 #define NAMELESSMODX    LPARX
-#define NAMELESSMOD      ((I)3<<NAMELESSMODX)  // set in a modifier to indicate that the value contains no names.  Such values are pushed onto the stack by value to save parsing overhead.
+#define NAMELESSMOD     ((I)1<<NAMELESSMODX)  // set in a modifier to indicate that the value contains no names.  Such values are pushed onto the stack by value to save parsing overhead.
                              // namelessness is detected only when a modifier is assigned, and is supported only for ADV types because of coding details.  It would be nice to support it
                              // for CONJ too, but a nameless conj would be either primitive or explicit, and users shouldn't cover primitives.  This feature is mostly for every/each/inv
 
@@ -536,6 +559,7 @@ typedef struct DS{      /* 1 2 3                                                
  B dcsusp;              /* x   x  1 iff begins a debug suspension                       */
  C dcss;                /*     x  single step code                                      */
  C dcnewlineno;         //     x  set when debug has installed a new line number into dcix
+ C dcpflags;            //   x    prompt flags, see JTPRTYO
  A dca;                 /*     x  fn/op name                                            */
  A dcf;                 /*     x  fn/op                                                 */
  A dcx;                 /*     x  left argument                                         */
@@ -698,6 +722,7 @@ typedef struct{
  I n;                   /* maximum number of records                       */
  I i;                   /* index of next record to be written              */
  I s;                   /* initial bytesmax value                          */
+ I pmctr;               // counter, set > 0 to start sampling
  B rec;                 /* what to record (0 entry & exit; 1 all)          */
  B trunc;               /* what to do on overflow (0 wrap; 1 truncate)     */
  B wrapped;             /* 1 iff wrapping has happened                     */
@@ -741,6 +766,7 @@ typedef struct {AF valencefns[2];A fgh[3];union { D lD; void *lvp[2]; I lI; I4 l
 // for reductions (u/ u/\ u/\.) lvp[1] points to the VA block for u
 // for u&.[:]v, lvp[0] points to the verb whose inverse is needed
 // for x <;.0 y  and  x (<;.0~ -~/"2)~ y, lpf.parm is ~0 for first, 0 for second, and func points to failover routine
+// for dyads ; (,<) ,&[:]<  lclr[0] indicates which function
 
 // lc is a local-use byte.  Used in atomic dyads to indicate which singleton function to execute
 // in the derived function from fold, lc has the original id byte of the fold op
@@ -793,7 +819,7 @@ typedef struct {AF valencefns[2];A fgh[3];union { D lD; void *lvp[2]; I lI; I4 l
 #define VXOP            (I)0x100000      /* : defn derived fn               */
 #define VXOPCALL        (I)0x200000      /* : defn derived fn call          */
 #define VTRY1           (I)0x400000      /* monad contains try.             */
-#define VTRY2           (I)0x800000      /* dyad  contains try.             */
+#define VTRY2           (I)0x800000      /* dyad  contains try.  must be just above VTRY1           */
 #define VDDOP           (I)0x1000000     /* 24 derived from a derived operator */
 #define VJTFLGOK1X    25    // 25 monad can handle flags in jt
 #define VJTFLGOK1     (((I)1)<<VJTFLGOK1X)
@@ -886,3 +912,23 @@ typedef struct {
   US  nvrtop;           /* top of nvr stack; # valid entries               */
   US  nvrotop;          // previous top of nvr stack
  } PFRAME;  // these are stacked en bloc
+
+typedef struct {
+  C*   sev;          /* comparison: sparse element value ptr            */
+  I    si;           /* comparison: sparse current cell index           */
+  I*   stv;          /* comparison: sparse element item indices         */
+  I    swf;          /* comparison: sparse wf value                     */
+  I    sxc;          /* comparison: sparse aii(x)                       */
+  C*   sxv;          /* comparison: sparse AV(x)                        */
+  I    syc;          /* comparison: sparse aii(y) or *(1+AS(y))         */
+  I*   syv;          /* comparison: sparse AV(y)                        */
+ } SORTSP;   // sparse extension for sortblok
+
+typedef struct {
+  CMP  f;             /* comparison function in sort                     */
+  J    jt;        // jt, including the DESCEND flag
+  I    n;            /* comparison: number of atoms in each item        */
+  I    k;            /* comparison: byte size of each item              */
+  C*   v;            /* comparison: beginning of data area              */
+  SORTSP *sp;  // pointer to extension for sparse arrays
+ } SORT;

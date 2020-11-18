@@ -14,7 +14,7 @@ static I jtfdepger(J jt,A w){A*wv;I d=0,k;
 
 #if !USECSTACK
 I jtfdep(J jt,A w){A f,g;I d=0,k;V*v;
- RZ(w);
+ ARGCHK1(w);
  v=VAV(w);
  if(v->fdep)R v->fdep;  // for speed, use previous value if it has been calculated
  if(f=v->fgh[0]) d=VERB&AT(f)?fdep(f):NOUN&AT(f)&&VGERL&v->flag?fdepger(f):0;
@@ -24,7 +24,7 @@ I jtfdep(J jt,A w){A f,g;I d=0,k;V*v;
  R 1+d;
 }    /* function depth:  1 + max depth of components */
 
-F1(jtfdepadv){RZ(w); ASSERT(VERB&AT(w),EVDOMAIN); R sc(fdep(w));}
+F1(jtfdepadv){ARGCHK1(w); ASSERT(VERB&AT(w),EVDOMAIN); R sc(fdep(w));}
 #endif
 
 
@@ -38,8 +38,8 @@ RETF(z);}
 
 
 // $: itself
-F1(jtself1){A z; FDEPINC(d=fdep(jt->sf)); STACKCHKOFL df1(z,  w,jt->sf); FDEPDEC(d); forcetomemory(w); RETF(z);}
-F2(jtself2){A z; FDEPINC(d=fdep(jt->sf)); STACKCHKOFL df2(z,a,w,jt->sf); FDEPDEC(d); forcetomemory(w); RETF(z);}
+F1(jtself1){A z; FDEPINC(d=fdep(jt->sf)); STACKCHKOFL df1(z,  w,jt->sf);  FDEPDEC(d); forcetomemory(w); RETF(z);}
+F2(jtself2){A z; FDEPINC(d=fdep(jt->sf)); STACKCHKOFL df2(z,a,w,jt->sf);  FDEPDEC(d); forcetomemory(w); RETF(z);}
 
 A jtac1(J jt,AF f){R fdef(0,0,VERB, f,0L, 0L,0L,0L, VFLAGNONE, RMAX,RMAX,RMAX);}
 A jtac2(J jt,AF f){R fdef(0,0,VERB, 0L,f, 0L,0L,0L, VFLAGNONE, RMAX,RMAX,RMAX);}
@@ -79,7 +79,7 @@ B nameless(A w){A f,g,h;C id;V*v;
 }
 
 B jtprimitive(J jt,A w){A x=w;V*v;
- RZ(w);
+ ARGCHK1(w);
  v=VAV(w);
  if(CTILDE==v->id&&NOUN&AT(v->fgh[0]))RZ(x=fix(w,zeroionei(0)));
  R!VAV(x)->fgh[0];
@@ -88,7 +88,7 @@ B jtprimitive(J jt,A w){A x=w;V*v;
 
 // w is a conj, f C n
 // Return 1 if f is of the form <@:g  (or <@g when g has infinite rank)
-B jtboxatop(J jt,A w){RZ(w); R 1&boxat(FAV(w)->fgh[0],RMAX,RMAX,RMAX);}
+B jtboxatop(J jt,A w){ARGCHK1(w); R 1&boxat(FAV(w)->fgh[0],RMAX,RMAX,RMAX);}
 
 // x is a verb
 // Return if verb is of the form <@:g  (or <@g when g has rank >= input rank)

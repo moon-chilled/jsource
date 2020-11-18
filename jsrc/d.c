@@ -14,6 +14,7 @@
 // All the 'display' routines in this file simply add characters to the error buffer.  They can't be typed
 // here, because the error may be captured by a higher-level routine
 
+// add n chars at *s to the error buffer at jt->etxn, increment jt->etxn
 static void jtep(J jt,I n,C*s){I m;
  m=NETX-jt->etxn; m=MIN(n,m); 
  if(0<m){MC(jt->etx+jt->etxn,s,m); jt->etxn+=m;}
@@ -28,8 +29,8 @@ static void jteputl(J jt,A w){ep(AN(w),CAV(w)); eputc(CLF);}
 static void jteputv(J jt,A w){I m=NETX-jt->etxn; if(m>0){jt->etxn+=thv(w,MIN(m,200),jt->etx+jt->etxn);}} // stop writing when there is no room in the buffer
      /* numeric vector w */
 
-static void jteputq(J jt,A w){C q=CQUOTE,*s;
- if(equ(ds(CALP),w))eputs(" a."+!jt->nflag);
+static void jteputq(J jt,A w,I nflag){C q=CQUOTE,*s;
+ if(equ(ds(CALP),w))eputs(" a."+!nflag);
  else{
   eputc(q);
   s=CAV(w); DO(AN(w), eputc(s[i]); if(q==s[i])eputc(q););
@@ -40,10 +41,11 @@ static void jtefmt(J jt,C*s,I i){
  if(15<NETX-jt->etxn){C*v=jt->etx+jt->etxn; sprintf(v,s,i); jt->etxn+=strlen(v);}
 }
 
-void jtshowerr(J jt){C b[1+2*NETX],*p,*q,*r;
- if(jt->etxn&&jt->tostdout){
+// jt has the typeout flags
+void jtshowerr(J jt){F1PREFJT;C b[1+2*NETX],*p,*q,*r;
+ if(jt->etxn&&!((I)jtinplace&JTPRNOSTDOUT)){  // if there is a message and it is not suppressed...
   p=b; q=jt->etx; r=q+jt->etxn;
-  while(q<r&&p<b+2*NETX-3){if(*q==CLF){strcpy(p,jt->outseq); p+=strlen(jt->outseq); ++q;}else *p++=*q++;}  // avoid buffer overrun on huge typeouts
+  while(q<r&&p<b+2*NETX-3){if(*q==CLF){strcpy(p,OUTSEQ); p+=strlen(OUTSEQ); ++q;}else *p++=*q++;}  // avoid buffer overrun on huge typeouts
   *p=0;
 #ifdef ANDROID
   A z=tocesu8(str(strlen(b),b));
@@ -56,20 +58,21 @@ void jtshowerr(J jt){C b[1+2*NETX],*p,*q,*r;
  jt->etxn=0;
 }
 
-static void jtdspell(J jt,C id,A w){C c,s[5];
- if(id==CFCONS){if(jt->nflag)eputc(' '); eputv(FAV(w)->fgh[2]); eputc(':');}
+static void jtdspell(J jt,C id,A w,I nflag){C c,s[5];
+ if(id==CFCONS){if(nflag)eputc(' '); eputv(FAV(w)->fgh[2]); eputc(':');}
  else{
   s[0]=' '; s[4]=0;
   spellit(id,1+s);
   c=s[1]; 
-  eputs(s+!(c==CESC1||c==CESC2||jt->nflag&&((ctype[(UC)c]&~CA)==0)));
+  eputs(s+!(c==CESC1||c==CESC2||nflag&&((ctype[(UC)c]&~CA)==0)));
 }}
 
 static F1(jtsfn0){R sfn(0,w);}  // return string form of full name for a NAME block
 EVERYFS(sfn0overself,jtsfn0,jtover,0,VFLAGNONE)
 
-static void jtdisp(J jt,A w){B b=1&&AT(w)&NAME+NUMERIC;
- if(b&&jt->nflag)eputc(' ');
+// print a noun; nflag if space needed before name/numeric; return new value of nflag
+static I jtdisp(J jt,A w,I nflag){B b=1&&AT(w)&NAME+NUMERIC;
+ if(b&&nflag)eputc(' ');
  switch(CTTZ(AT(w))){
  case B01X:
  case INTX:
@@ -78,32 +81,40 @@ static void jtdisp(J jt,A w){B b=1&&AT(w)&NAME+NUMERIC;
  case XNUMX: 
  case RATX:  eputv(w);                break;
  case BOXX:
-  if(!(AT(w)&BOXMULTIASSIGN)){eputs(" a:"+!jt->nflag); break;}
+  if(!(AT(w)&BOXMULTIASSIGN)){eputs(" a:"+!nflag); break;}
   // If this is an array of names, turn it back into a character string with spaces between
   else{w=curtail(raze(every2(every(w,(A)&sfn0overself),chrspace,(A)&sfn0overself)));}  // }: (string&.> names) ,&.> ' '  then fall through to display it
- case LITX:  eputq(w);                break;
+ case LITX:  eputq(w,nflag);                break;
  case NAMEX: ep(AN(w),NAV(w)->s);     break;
  case LPARX: eputc('(');              break;
  case RPARX: eputc(')');              break;
- case ASGNX: dspell(CAV(w)[0],w);       break;
+ case ASGNX: dspell(CAV(w)[0],w,nflag);       break;
  case MARKX:                          break;
- default:   dspell(FAV(w)->id,w);     break;
+ default:   dspell(FAV(w)->id,w,nflag);     break;
  }
- jt->nflag=b;
+ R b;  // new nflag
 }
 
 // display DCPARSE stack frame
 static void jtseeparse(J jt,DC d){A*v;I m;
  v=(A*)d->dcy;  /* list of tokens */
  m=d->dcix-1;         /* index of active token when error found */
- jt->nflag=0; 
- DO(d->dcn, if(i==m)eputs("    "); disp(v[i]););  // display tokens with spaces before error
+ I nflag=0;
+ I m1=jt->etxn;  // starting index of sentence text
+ DO(d->dcn, if(i==m)eputs("    "); nflag=disp(v[i],nflag););  // display tokens with spaces before error
+ if(jt->etxn<NETX){  // if we overran the buffer, don't reformat it.  Reformatting requires splitting to words
+  // We displayed the sentence.  See if it contains (9 :'string'); if so, replace with {{ string }}
+  fauxblock(fauxw); A z=(A)&fauxw;
+  AK(z)=jt->etx+m1-(C*)z; AFLAG(z)=0; AT(z)=LIT; AC(z)=ACUC1; AR(z)=1; AN(z)=AS(z)[0]=jt->etxn-m1;  // point to etx for parsed line
+  jtunDD((J)((I)jt|JTINPLACEW|JTINPLACEA),z);  // reformat in place
+  jt->etxn=m1+AN(z);  // set new end-of-sentence pointer
+ }
 }    /* display error line */
 
 F1(jtunparse){A*v,z;
- RZ(w);
- jt->etxn=jt->nflag=0;
- v=AAV(w); DO(AN(w), disp(v[i]);); z=str(jt->etxn,jt->etx);
+ ARGCHK1(w);
+ jt->etxn=0; I nflag=0;
+ v=AAV(w); DO(AN(w), nflag=disp(v[i],nflag);); z=str(jt->etxn,jt->etx);
  jt->etxn=0;
  R z;
 }
@@ -187,7 +198,7 @@ void jtjsignal(J jt,I e){A x;
 // }
  // Errors > NEVM are internal-only errors that should never make it to the end of execution.
  // Ignore them here - they will not be displayed
- x=0<e&&e<=NEVM?AAV(jt->evm)[e]:mtv; jsigstr(e,AN(x),CAV(x));
+ x=BETWEENC(e,1,NEVM)?AAV(jt->evm)[e]:mtv; jsigstr(e,AN(x),CAV(x));
 }
 
 void jtjsignal3(J jt,I e,A w,I j){

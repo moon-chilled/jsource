@@ -70,10 +70,10 @@ static A jtsprz(J jt,A z0,A y,A e,I f,I*s){A a,a0,q,y0,z;B d;I c,et,h,m,n,r,t,*u
 
 A jtsprank1(J jt,A w,A fs,I mr,AF f1){PROLOG(0043);A q,wx,wy,wy1,ww,z,ze,zi,*zv;B*wb;
      I c,i,*iv,j,k,m,n,*v,wcr,wf,wr,*ws,wt,*wv;P*wp,*wq;
- RZ(w);
+ ARGCHK1(w);
  wr=AR(w); ws=AS(w); efr(wcr,wr,mr); wf=wr-wcr;
  if(!wf)R CALL1(f1,w,fs);
- DO(wf, ASSERT(ws[i],EVNONCE););
+ DO(wf, ASSERT(ws[i]!=0,EVNONCE););
  RZ(w=sprarg(wf,w)); wp=PAV(w); wx=SPA(wp,x); wy=SPA(wp,i); 
  if(mr){
   wt=AT(w); 
@@ -148,13 +148,13 @@ static A jtsprank2_a0(J jt,A a,A w,A fs,AF f2,I af,I acr){PROLOG(0045);A aa,ae,y
 
 A jtsprank2(J jt,A a,A w,A fs,I lr,I rr,AF f2){PROLOG(0046);A aa,ae,we,ww,y,zi,z,*zv;B*ab,b,*wb;I ac,acr,af,aj,ak,am,an,
      ar,*as,at,*av,d,f,g,*ii,*iv,j,k,m,s,*u,*v,wc,wcr,wf,wj,wk,wm,wn,wr,*ws,wt,*wv;P*ap,*wp;
- RZ(a&&w);
+ ARGCHK2(a,w);
  STACKCHKOFL
  ar=AR(a); as=AS(a); efr(acr,ar,lr); af=ar-acr; 
  wr=AR(w); ws=AS(w); efr(wcr,wr,rr); wf=wr-wcr; 
  if(!af&&!wf)R CALL2(f2,a,w,fs);
- DO(af, ASSERT(as[i],EVNONCE););
- DO(wf, ASSERT(ws[i],EVNONCE););
+ DO(af, ASSERT(as[i]!=0,EVNONCE););
+ DO(wf, ASSERT(ws[i]!=0,EVNONCE););
  if(!af)R sprank2_0w(a,w,fs,f2,wf,wcr);
  if(!wf)R sprank2_a0(a,w,fs,f2,af,acr);
  f=MIN(af,wf); g=MAX(af,wf); m=1;
@@ -208,12 +208,12 @@ A jtsprank2(J jt,A a,A w,A fs,I lr,I rr,AF f2){PROLOG(0046);A aa,ae,we,ww,y,zi,z
 #if 0 // not working
 A jtva2s(J jt,A a,A w,C id,VF ado,I cv,I t,I zt,I lr,I rr){PROLOG(0047);A aa,ae,we,ww,y,zi,z,*zv;B*ab,b,*wb;I ac,acr,af,aj,ak,am,an,
      ar,*as,at,*av,d,f,g,*ii,*iv,j,k,m,s,*u,*v,wc,wcr,wf,wj,wk,wm,wn,wr,*ws,wt,*wv;P*ap,*wp;
- RZ(a&&w);
+ ARGCHK2(a,w);
  ar=AR(a); as=AS(a); efr(acr,ar,lr); af=ar-acr; 
  wr=AR(w); ws=AS(w); efr(wcr,wr,rr); wf=wr-wcr; 
  if(!af&&!wf){ado(jt,a,w); R 0;}
- DO(af, ASSERT(as[i],EVNONCE););
- DO(wf, ASSERT(ws[i],EVNONCE););
+ DO(af, ASSERT(as[i]!=0,EVNONCE););
+ DO(wf, ASSERT(ws[i]!=0,EVNONCE););
  if(!ar){ado(jt,a,w); R 0;}
  if(!wr){ado(jt,a,w); R 0;}
  f=MIN(af,wf); g=MAX(af,wf); m=1;

@@ -54,11 +54,13 @@ FORCE_INLINE __m128d _mm_permute_pd(__m128d a, int control)
     return dest;
 }
 
-FORCE_INLINE __m128d _mm_xor_pd(__m128d a, __m128d b)
-{
-    return vreinterpretq_f64_s32(
-        veorq_s32(vreinterpretq_s32_f64(a), vreinterpretq_s32_f64(b)));
-}
+#define _mm_permute_ps(a, control) _mm_castsi128_ps( _mm_shuffle_epi32( *(__m128i*)&a, control ) )
+
+// FORCE_INLINE __m128d _mm_xor_pd(__m128d a, __m128d b)
+// {
+//     return vreinterpretq_f64_s32(
+//         veorq_s32(vreinterpretq_s32_f64(a), vreinterpretq_s32_f64(b)));
+// }
 
 FORCE_INLINE __m128d _mm_sub_pd(__m128d a, __m128d b)
 {
@@ -76,12 +78,12 @@ FORCE_INLINE void _mm_storel_pd(double * mem_addr, __m128d a)
     *mem_addr = vget_low_u64(vreinterpretq_u64_f64(a));
 }
 
-FORCE_INLINE __m128d _mm_set_pd(double e1, double e0)
-{
-    __m128d res;
-    SET64x2(res, e0, e1);
-    return res;
-}
+// FORCE_INLINE __m128d _mm_set_pd(double e1, double e0)
+// {
+//     __m128d res;
+//     SET64x2(res, e0, e1);
+//     return res;
+// }
 
 FORCE_INLINE __m128d _mm_set1_pd(double a)
 {
@@ -184,6 +186,14 @@ FORCE_INLINE __m128i _mm_div_epu16(__m128i a, __m128i b)
     res_hi = vdivq_f32(fa[1], fb[1]);
     res = vcombine_u16(vmovn_u32(vcvtq_u32_f32(res_lo)), vmovn_u32(vcvtq_u32_f32(res_hi)));
     return res;
+}
+
+// Cast vector of type __m128d to type __m128. This intrinsic is only used for
+// compilation and does not generate any instructions, thus it has zero latency.
+// https://software.intel.com/sites/landingpage/IntrinsicsGuide/#text=_mm_castpd_ps
+FORCE_INLINE __m128 _mm_castpd_ps(__m128d a)
+{
+    return vreinterpretq_m128_s64(vreinterpretq_s64_m128d(a));
 }
 
 #if defined(__GNUC__) || defined(__clang__)

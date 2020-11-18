@@ -305,13 +305,13 @@ PREFIXPFX(bw1111pfxI, UI,UI, BW1111, bw1111II,R EVOK;)
 // This old prefix support is needed for sparse matrices
 
 static DF1(jtprefix){DECLF;I r;
- RZ(w);
+ ARGCHK1(w);
  r = (RANKT)jt->ranks; RESETRANK; if(r<AR(w)){R rank1ex(w,self,r,jtprefix);}
  R eachl(apv(SETIC(w,r),1L,1L),w,atop(fs,ds(CTAKE)));
 }    /* f\"r w for general f */
 
 static DF1(jtgprefix){A h,*hv,z,*zv;I m,n,r;
- RZ(w);
+ ARGCHK1(w);
  ASSERT(DENSE&AT(w),EVNONCE);
  r = (RANKT)jt->ranks; RESETRANK; if(r<AR(w)){R rank1ex(w,self,r,jtgprefix);}
  SETIC(w,n); 
@@ -327,7 +327,7 @@ static DF1(jtgprefix){A h,*hv,z,*zv;I m,n,r;
 // block a contains (start,length) of infix.  w is the A for the data.
 // Result is new block containing the extracted infix
 static F2(jtseg){A z;I c,k,m,n,*u,zn;
- RZ(a&&w);
+ ARGCHK2(a,w);
  // The (start,length) had better be integers.  Extract them into m,n
  if(INT&AT(a)){u=AV(a); m=*u; n=*(1+u);} else m=n=0;
  c=aii(w); k=c<<bplg(AT(w)); DPMULDE(n,c,zn);  // c=#atoms per item, k=#bytes/item, zn=atoms/infix
@@ -340,7 +340,7 @@ static F2(jtseg){A z;I c,k,m,n,*u,zn;
 // m is the infix length (x), w is the array (y)
 // Result is A for an nx2 table of (starting item#,length) for each infix
 static A jtifxi(J jt,I m,A w){A z;I d,j,k,n,p,*x;
- RZ(w);
+ ARGCHK1(w);
  // p=|m, n=#items of w, d=#applications of u (depending on overlapping/nonoverlapping)
  p=ABS(m); SETIC(w,n);
  if(m>=0){d=MAX(0,1+n-m);}else{d=1+(n-1)/p; d=(n==0)?n:d;}
@@ -408,10 +408,10 @@ static DF2(jtginfix){A h,*hv,x,z,*zv;I d,m,n;
 static DF2(jtinfixprefix2){F2PREFIP;PROLOG(00202);A fs;I cger[128/SZI];
    I wt;
  
- RZ(w);
+ ARGCHK1(w);
  PREF2IP(jtinfixprefix2);  // handle rank loop if needed
  wt=AT(w);
- if(unlikely(wt&SPARSE)){
+ if(unlikely((wt&SPARSE)!=0)){
   // Use the old-style non-virtual code for sparse types
   switch(((VAV(self)->flag&VGERL)>>(VGERLX-1)) + (a==mark)) {  // 2: is gerund  1: is prefix
   case (0+0): R jtinfix(jt,a,w,self);
@@ -592,15 +592,15 @@ static DF1(jtinfixprefix1){F1PREFIP;
 
 //  f/\"r y    w is y, fs is in self
 static DF1(jtpscan){A z;I f,n,r,t,wn,wr,*ws,wt;
- RZ(w);F1PREFIP;
+ F1PREFIP;ARGCHK1(w);
  wt=AT(w);   // get type of w
- if(unlikely(SPARSE&wt))R scansp(w,self,jtpscan);  // if sparse, go do it separately
+ if(unlikely((SPARSE&wt)!=0))R scansp(w,self,jtpscan);  // if sparse, go do it separately
  // wn = #atoms in w, wr=rank of w, r=effective rank, f=length of frame, ws->shape of w
  wn=AN(w); wr=AR(w); r=(RANKT)jt->ranks; r=wr<r?wr:r; RESETRANK; f=wr-r; ws=AS(w);
  // m = #cells, c=#atoms/cell, n = #items per cell
  SETICFR(w,f,r,n);  // wn=0 doesn't matter
  // If there are 0 or 1 items, or w is empty, return the input unchanged, except: if rank 0, return (($w),1)($,)w - if atomic op, do it right here, otherwise call the routine to get the shape of result cell
- if(((1-n)&-wn)>=0){R r?RETARG(w):reshape(over(shape(w),num(1)),w);}  // n<2 or wn=0
+ if(((1-n)&-wn)>=0){R r?RETARG(w):reshape(apip(shape(w),zeroionei(1)),w);}  // n<2 or wn=0
  VARPS adocv; varps(adocv,self,wt,1);  // fetch info for f/\ and this type of arg
  if(!adocv.f)R IRS1(w,self,r,jtinfixprefix1,z);  // if there is no special function for this type, do general scan
  // Here is the fast special reduce for +/ etc
@@ -725,7 +725,7 @@ static A jtmovminmax(J jt,I m,A w,A fs,B max){A y,z;I c,i,j,p,wt;
  SETIC(w,p); p-=m; wt=AT(w); c=aii(w);
  GA(z,AT(w),c*(1+p),AR(w),AS(w)); AS(z)[0]=1+p;
  switch(max + ((wt>>(INTX-1))&6)){
-  case 0: MOVMINMAXS(SB,SBT,jt->sbuv[0].down,SBLE); break;
+  case 0: MOVMINMAXS(SB,SBT,SBUV4(jt->sbu)[0].down,SBLE); break;
   case 1: MOVMINMAXS(SB,SBT,0,SBGE); break;
   case 2: MOVMINMAX(I,INT,IMAX,<=); break;
   case 3: MOVMINMAX(I,INT,IMIN,>=); break;
@@ -827,7 +827,7 @@ static DF2(jtmovfslash){A x,z;B b;C id,*wv,*zv;I d,m,m0,p,t,wk,wt,zi,zk,zt;
  PROD(d,AR(w)-1,AS(w)+1) b=0>m0&&zi*m!=p;   // b='has shard'
  zt=rtype(adocv.cv); RESETRANK;
  GA(z,zt,d*zi,MAX(1,AR(w)),AS(w)); AS(z)[0]=zi;
- if(d*zi==0)RETF(z);  // mustn't call adocv on empty arg!
+ if(d*zi==0){RETF(z);}  // mustn't call adocv on empty arg!
  if((t=atype(adocv.cv))&&TYPESNE(t,wt)){RZ(w=cvt(t,w)); wt=AT(w);}
  zv=CAV(z); zk=d<<bplg(zt); 
  wv=CAV(w); wk=(0<=m0?d:d*m)<<bplg(wt);
@@ -841,7 +841,7 @@ static DF1(jtiota1){I j; R apv(SETIC(w,j),1L,1L);}
 
 F1(jtbslash){A f;AF f1=jtinfixprefix1,f2=jtinfixprefix2;V*v;I flag=FAV(ds(CBSLASH))->flag;
 ;
- RZ(w);
+ ARGCHK1(w);
  if(NOUN&AT(w))R fdef(0,CBSLASH,VERB, jtinfixprefix1,jtinfixprefix2, w,0L,fxeachv(1L,w), VGERL|flag, RMAX,0L,RMAX);
  v=FAV(w);  // v is the u in u\ y
  switch(v->id){
@@ -864,4 +864,4 @@ F1(jtbslash){A f;AF f1=jtinfixprefix1,f2=jtinfixprefix2;V*v;I flag=FAV(ds(CBSLAS
  R f;
 }
 
-A jtascan(J jt,C c,A w){RZ(w); A z; R df1(z,w,bslash(slash(ds(c))));}
+A jtascan(J jt,C c,A w){ARGCHK1(w); A z; R df1(z,w,bslash(slash(ds(c))));}

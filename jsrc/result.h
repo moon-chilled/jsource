@@ -137,7 +137,7 @@ do{
     if(unlikely(TYPESNE(zt,zzt))){
      // The type changed.  Convert the types to match.
      zt=maxtypedne(zt,zzt);  // get larger priority
-     if(likely(AN(z))){I zatomct;
+     if(likely(AN(z)!=0)){I zatomct;
       // nonempty cells. we must convert the actual data.  See which we have to change
       if(zt==zzt){
        // Here the type of z must change.  Just convert it to type zt
@@ -199,7 +199,7 @@ do{
 #endif
     // **** z may have been destroyed and must not be used from here on ****
    }else{  // there was a wreck
-    if(unlikely(zt&SPARSE)){
+    if(unlikely((zt&SPARSE)!=0)){
      // we encountered a sparse result.  Ecch.  We are going to have to box all the results and open them.  Remember that fact
      ZZFLAGWORD|=ZZFLAGUSEOPEN;
     }
@@ -234,7 +234,7 @@ do{
 #endif
       // Allocate the boxed-result area.  Every result that doesn't match zz will be stored here, and we leave zeros for the places that DID match zz,
       // so that we can tell which result-cells come from zz and which from zzbox.
-      // We DO NOT make zzbox recursive, so there will be no overhead on the usecount when zzbox is freed.  This is OK because we stop tpop'ing
+      // We DO NOT make zzbox recursive, so there will be no overhead on the usecount when zzbox is freed.
       GATV0(zzbox,BOX,nboxes,0);   // rank/shape immaterial
       zzboxp=AAV(zzbox);  // init pointer to filled boxes, will be the running storage pointer
 #if ZZSTARTATEND
@@ -265,10 +265,12 @@ do{
     // but never an output from the block it is created in, since it changes during the loop.  Thus, UNINCORPABLEs are found only in the loop that created them.
     // It might be better to keep the result recursive and transfer ownership of the virtual block, but not by much.
     if(AFLAG(z)&AFUNINCORPABLE){RZ(z=clonevirtual(z));}
-    // since we are adding the block to a NONrecursive boxed result,  we DO NOT have to raise the usecount of the block.  And we can leave the usecount inplaceable.  The only way the inplaceable
-    // usecount would be exposed is if the next thing is u&.>, and there it is OK - if the overall argument is inplaceable, the contents would be marked inplaceable anyway
-    *zzboxp=z;  // install the new box.  zzboxp is ALWAYS a pointer to a box when force-boxed result
-    if(unlikely(ZZFLAGWORD&ZZFLAGCOUNTITEMS)){
+    // since we are adding the block to a NONrecursive boxed result,  we DO NOT have to raise the usecount of the block, but we do have to mark the block
+    // non-inplaceable, because the next thing to open it might be each: each will set the inplaceable flag if the parent is abandoned, so as to allow
+    // pristinity of lower results; thus we may not relax the rule that all contents must be non-inplaceable
+    // box code all over assumes that contents are never inplaceable, and since we go through here only when we are going through box code next, we honor that
+    ACIPNO(z); *zzboxp=z;  // install the new box.  zzboxp is ALWAYS a pointer to a box when force-boxed result
+    if(unlikely((ZZFLAGWORD&ZZFLAGCOUNTITEMS)!=0)){
      // if the result will be razed next, we will count the items and store that in AM.  We will also ensure that the result boxes' contents have the same type
      // and item-shape.  If one does not, we turn off special raze processing.  It is safe to take over the AM field in this case, because we know this is WILLBEOPENED and
      // (1) will never assemble or epilog; (2) will feed directly into a verb that will discard it without doing any usecount modification
@@ -315,7 +317,7 @@ do{
   // If zz is recursible, make it recursive-usecount (without actually recurring, since it's empty), unless WILLBEOPENED is set, since then we may put virtual blocks in the boxed array
   AFLAG(zz) |= (zzt&RECURSIBLE) & ((ZZFLAGWORD&ZZFLAGWILLBEOPENED)-1);  // if recursible type, (viz box), make it recursible.  But not if WILLBEOPENED set. Leave usecount unchanged
   // If zz is not DIRECT, it will contain things allocated on the stack and we can't pop back to here
-#if 0&&!ZZPOPNEVER
+#if 0&&!ZZPOPNEVER  // obsolete 
   ZZFLAGWORD |= (zzt&DIRECT)?0:ZZFLAGNOPOP;
   // Remember the point before which we allocated zz.  This will be the free-back-to point, unless we require boxes later
   zzold=jt->tnextpushp;  // pop back to AFTER where we allocated our result and argument blocks
@@ -357,7 +359,7 @@ do{
  if(ZZFLAGWORD&ZZFLAGBOXALLO){
   RZ(zz=assembleresults(ZZFLAGWORD,zz,zzbox,zzboxp,zzcellp,zzcelllen,zzresultpri,zzcellshape,zzncells,zzframelen,-ZZSTARTATEND));  // inhomogeneous results: go assemble them
  }
- // assemly may have added framing fill but it didn't repeat any cells.  If we thought the result was pristine, it is
+ // assembly may have added framing fill but it didn't repeat any cells.  If we thought the result was pristine, it is
  AFLAG(zz)|=ZZFLAGWORD&ZZFLAGPRISTINE;
 #undef ZZFLAGWORD
 #undef ZZWILLBEOPENEDNEVER

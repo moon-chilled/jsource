@@ -51,7 +51,7 @@ static A jtovs0(J jt,B p,I r,A a,A w){A a1,e,q,x,y,z;B*b;I at,*av,c,d,j,k,f,m,n,
 }    /* a,"r w (0=p) or w,"r a (1=p) where a is scalar and w is sparse */
 
 static F2(jtovs){A ae,ax,ay,q,we,wx,wy,x,y,z,za,ze;B*ab,*wb,*zb;I acr,ar,*as,at,c,m,n,r,t,*v,wcr,wr,*ws,wt,*zs;P*ap,*wp,*zp;
- RZ(a&&w);
+ ARGCHK2(a,w);
  acr=jt->ranks>>RANKTX; ar=AR(a); at=AT(a); acr=ar<acr?ar:acr; 
  wcr=(RANKT)jt->ranks; wr=AR(w); wt=AT(w); wcr=wr<wcr?wr:wcr; RESETRANK; 
  if(!ar)R ovs0(0,wcr,a,w);
@@ -119,7 +119,7 @@ static C*jtovgmove(J jt,I k,I c,I m,A s,A w,C*x,A z){I d,n,p=c*m;
 }    /* move an argument into the result area */
 
 static F2(jtovg){A s,z;C*x;I ar,*as,c,k,m,n,r,*sv,t,wr,*ws,zn;
- RZ(a&&w);
+ ARGCHK2(a,w);
  I origwt=AT(w); RZ(w=setfv(a,w));
  if(AT(a)!=(t=AT(w))){t=maxtypedne(AT(a)|(AN(a)==0),t|(((t^origwt)+AN(w))==0)); t&=-t; if(!TYPESEQ(t,AT(a))){RZ(a=cvt(t,a));} else {RZ(w=cvt(t,w));}}  // convert args to compatible precisions, changing a and w if needed.  B01 if both empty.  If fill changed w, don't do B01 for it
  ar=AR(a); wr=AR(w); r=ar+wr?MAX(ar,wr):1;
@@ -178,11 +178,11 @@ static void moveawSV(C *zv,C *av,C *wv,I c,I k,I ma,I mw,I arptreset,I wrptreset
 }
 int (*p[4]) (int x, int y);
 static void(*moveawtbl[])() = {moveawVV,moveawVS,moveawSV};
-F2(jtover){A z;C*zv;I replct,framect,acr,af,ar,*as,k,ma,mw,p,q,r,t,wcr,wf,wr,*ws,zn;
- RZ(a&&w);F2PREFIP;
+F2(jtover){AD * RESTRICT z;C*zv;I replct,framect,acr,af,ar,*as,k,ma,mw,p,q,r,t,wcr,wf,wr,*ws,zn;
+ F2PREFIP;ARGCHK2(a,w);
  UI jtr=jt->ranks;//  fetch early
- if(unlikely(SPARSE&(AT(a)|AT(w)))){R ovs(a,w);}  // if either arg is sparse, switch to sparse code
- if(AT(a)!=(t=AT(w))){t=maxtypedne(AT(a)|(AN(a)==0),t|(AN(w)==0)); t&=-t; if(!TYPESEQ(t,AT(a))){RZ(a=cvt(t,a));} else {RZ(w=cvt(t,w));}}  // convert args to compatible precisions, changing a and w if needed.  Treat empty arg as boolean
+ if(unlikely((SPARSE&(AT(a)|AT(w)))!=0)){R ovs(a,w);}  // if either arg is sparse, switch to sparse code
+ if(unlikely(AT(a)!=(t=AT(w)))){t=maxtypedne(AT(a)|(AN(a)==0),t|(AN(w)==0)); t&=-t; if(!TYPESEQ(t,AT(a))){RZ(a=cvt(t,a));} else {RZ(w=cvt(t,w));}}  // convert args to compatible precisions, changing a and w if needed.  Treat empty arg as boolean
  ar=AR(a); wr=AR(w);
  acr=jtr>>RANKTX; acr=ar<acr?ar:acr; af=ar-acr;  // acr=rank of cell, af=len of frame, as->shape
  wcr=(RANKT)jtr; wcr=wr<wcr?wr:wcr; wf=wr-wcr;  // wcr=rank of cell, wf=len of frame, ws->shape
@@ -193,11 +193,13 @@ F2(jtover){A z;C*zv;I replct,framect,acr,af,ar,*as,k,ma,mw,p,q,r,t,wcr,wf,wr,*ws
   // No frame.  See if ranks are equal or different by 1, and if the items have the same shape
   I lr=ar;  // rank of arg with long shape
   A l=a; l=wr>ar?w:l; lr=wr>ar?wr:lr;  // arg with long shape.  Not needed till later but we usually go through the fast path
-  if(2*lr-1<=ar+wr){  // if ranks differ by at most 1
+  if(likely(2*lr-1<=ar+wr)){  // if ranks differ by at most 1
    // items have the same rank or one argument is an item of the other (cases where the ranks differ by more than 1 follow the general path below)
    // see if the shapes agree up to the shape of an item of the longer argument
-   I mismatch=0; I *ase=as+ar-1, *wse=ws+wr-1; DQ(lr-1, mismatch|=*ase--^*wse--;);
-   if(!mismatch){
+   I mismatch=0; I cr=lr-1; cr=cr<0?0:cr;
+   TESTDISAGREE(mismatch,as+ar-cr,ws+wr-cr,cr)  // compare the tail of the shapes, for the length of an item of the longer shape
+// obsolete    I *ase=as+ar-1, *wse=ws+wr-1; DQ(lr-1, mismatch|=*ase--^*wse--;);
+   if(likely(!mismatch)){
     // The data can be copied in toto, with only the number of items changing.
     A s=(A)((I)a+(I)w-(I)l);  // arg with short shape
     // The rank is the rank of the long argument, unless both arguments are atoms; then it's 1
@@ -207,10 +209,20 @@ F2(jtover){A z;C*zv;I replct,framect,acr,af,ar,*as,k,ma,mw,p,q,r,t,wcr,wf,wr,*ws
     I klg=bplg(t); I alen=AN(a)<<klg; I wlen=AN(w)<<klg;
     GA(z,t,AN(a)+AN(w),lr,AS(l)); AS(z)[0]=si; C *x=CAV(z);  // install # items after copying shape
     JMC(x,CAV(a),alen+(SZI-1),loop1,0); JMC(x+alen,CAV(w),wlen+(SZI-1),loop2,0);
-    // We extracted from a and w, so mark them (or the backer if virtual) non-pristine.  If both were pristine and inplaceable, transfer its pristine status to the result
+    // If a & w are both recursive abandoned pristine, we can take ownership of the contents by marking them nonrecursive and marking z recursive.
+    // We could also zap a & w, but we don't because it's just a box header and it will be freed by a caller anyway
+    // Pristinity is required because otherwise there might be blocks present in both, and the usecount would be too low in result
+    I xfer, aflg=AFLAG(a), wflg=AFLAG(w);
+    xfer=aflg&wflg&(RECURSIBLE|AFPRISTINE);  
+    xfer&=REPSGN((JTINPLACEA-((JTINPLACEA+JTINPLACEW)*(a!=w)&(I)jtinplace))&AC(a)&AC(w)&SGNIF(xfer,AFPRISTINEX));
+     // xfer is the transferable recursibility if any: both abandoned, both recursible, not same blocks
+    AFLAG(z)|=xfer; xfer|=AFPRISTINE; AFLAG(a)=aflg&=~xfer; AFLAG(w)=wflg&=~xfer;  // transfer inplaceability/pristinity; always clear pristinity from a/w
+    // We extracted from a and w, so mark them (or the backer if virtual) non-pristine.  If both were pristine and abandoned, transfer its pristine status to the result
     // if they were boxed nonempty, a and w have not been changed.  Otherwise the PRISTINE flag doesn't matter.
     // If a and w are the same, we mustn't mark the result pristine!  It has repetitions
-    PRISTXFERF2(z,a,w);   // pass PRISTINE status through if possible, make inputs non-PRISTINE
+    if(unlikely((aflg&AFVIRTUAL)!=0)){AFLAG(ABACK(a))&=~AFPRISTINE;}  //  like PRISTCOMSETF
+    if(unlikely((wflg&AFVIRTUAL)!=0)){AFLAG(ABACK(w))&=~AFPRISTINE;}  //  like PRISTCOMSETF
+// obsolete     PRISTXFERF2(z,a,w);   // pass PRISTINE status through if possible, make inputs non-PRISTINE
     RETF(z);
    }
   }
@@ -240,7 +252,7 @@ F2(jtover){A z;C*zv;I replct,framect,acr,af,ar,*as,k,ma,mw,p,q,r,t,wcr,wf,wr,*ws
 }    /* overall control, and a,w and a,"r w for cell rank <: 2 */
 
 F2(jtstitch){I ar,wr; A z;
- RZ(a&&w);F2PREFIP;
+ F2PREFIP;ARGCHK2(a,w);
  ar=AR(a); wr=AR(w);
  ASSERT((-ar&-wr&-(AS(a)[0]^AS(w)[0]))>=0,EVLENGTH);  // a or w scalar, or same # items    always OK to fetch s[0]
  if(likely((((SPARSE&(AT(a)|AT(w)))-1)&(2-ar)&(2-wr))>=0))R IRSIP2(a,w,0L,(ar-1)&RMAX,(wr-1)&RMAX,jtover,z);  // not sparse or rank>2
@@ -248,7 +260,7 @@ F2(jtstitch){I ar,wr; A z;
 }
 
 F1(jtlamin1){A x;I* RESTRICT s,* RESTRICT v,wcr,wf,wr; 
- RZ(w);F1PREFIP;
+ F1PREFIP;ARGCHK1(w);
  wr=AR(w); wcr=(RANKT)jt->ranks; wcr=wr<wcr?wr:wcr; RESETRANK; wf=wr-wcr;
  fauxblockINT(wfaux,4,1); fauxINT(x,wfaux,1+wr,1) v=AV(x);
  s=AS(w); MCISH(v,s,wf); v[wf]=1; MCISH(v+wf+1,s+wf,wcr);  // frame, 1, shape - the final shape
@@ -257,7 +269,7 @@ F1(jtlamin1){A x;I* RESTRICT s,* RESTRICT v,wcr,wf,wr;
 
 F2(jtlamin2){A z;I ar,p,q,wr;
  // Because we don't support inplacing here, the inputs & results will be marked non-pristine.  That's OK because scalar replication might have happened.
- RZ(a&&w); 
+ ARGCHK2(a,w); 
  ar=AR(a); p=jt->ranks>>RANKTX; p=ar<p?ar:p;  // p=cell rank of a, q=cell rank of w
  wr=AR(w); q=(RANKT)jt->ranks; q=wr<q?wr:q; RESETRANK;
  if(p)RZ(a=IRS1(a,0L,p,jtlamin1,z));
@@ -269,7 +281,7 @@ F2(jtlamin2){A z;I ar,p,q,wr;
 
 // Append, including tests for append-in-place
 A jtapip(J jt, A a, A w){F2PREFIP;A h;C*av,*wv;I ak,k,p,*u,*v,wk,wm,wn;
- RZ(a&&w);
+ ARGCHK2(a,w);
  // Allow inplacing if we have detected an assignment to a name on the last execution, and the address
  // being assigned is the same as a, and the usecount of a allows inplacing; or
  // the argument a is marked inplaceable.  Usecount of <1 is inplaceable, and for memory-mapped nouns, 2 is also OK since

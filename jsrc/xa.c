@@ -19,12 +19,17 @@ F1(jtassertq){ASSERTMTV(w); R scb(jt->assert);}
 
 F1(jtasserts){B b; RE(b=b0(w)); jt->assert=b; R mtm;}
 
-F1(jtboxq){ASSERTMTV(w); R ca(jt->bxa);}
+F1(jtdirectdefq){ASSERTMTV(w); R scb(jt->directdef);}  // scaf 9!:62
+
+F1(jtdirectdefs){B b; RE(b=b0(w)); jt->directdef=b; R mtm;}  // scaf 9!:63
+
+F1(jtboxq){ASSERTMTV(w); R str(sizeof(jt->bx),jt->bx);}
 
 F1(jtboxs){A x;
  RZ(w=vs(w));
- ASSERT(11==AS(w)[0],EVLENGTH);
- x=jt->bxa; RZ(ras(w)); RZ(jt->bxa=w); jt->bx=CAV(jt->bxa); fa(x);
+ ASSERT(sizeof(jt->bx)==AS(w)[0],EVLENGTH);
+// obsolete  x=jt->bxa; RZ(ras(w)); RZ(jt->bxa=w); jt->bx=CAV(jt->bxa); fa(x);
+ MC(jt->bx,CAV(w),sizeof(jt->bx));
  R mtv;
 }  // box-display characters
 
@@ -54,7 +59,7 @@ F1(jtdisps){UC n;
 F1(jtevmq){ASSERTMTV(w); R behead(jt->evm);}
 
 F1(jtevms){A t,*tv,*wv;
- RZ(w);
+ ARGCHK1(w);
  ASSERT(1==AR(w),EVRANK);
  ASSERT(NEVM==AN(w),EVLENGTH);
  ASSERT(BOX&AT(w),EVDOMAIN);
@@ -67,7 +72,7 @@ F1(jtevms){A t,*tv,*wv;
 }
 
 F1(jtfxx){
- RZ(w);
+ ARGCHK1(w);
  ASSERT(AT(w)&LIT+BOX,EVDOMAIN);
  ASSERT(1>=AR(w),EVRANK);
  R fx(ope(w)); 
@@ -85,7 +90,7 @@ F1(jtiepq){
 }
 
 F1(jtieps){
- RZ(w);
+ ARGCHK1(w);
  ASSERT(1>=AR(w),EVRANK);
  ASSERT(!AN(w)||AT(w)&LIT,EVDOMAIN);
  fa(jt->iep);
@@ -93,8 +98,10 @@ F1(jtieps){
  R mtm;
 }
 
+// 9!:38
 F1(jtoutparmq){A z;D*u;I*v;
  ASSERTMTV(w);
+#if 0 // obsolete 
  if(IMAX==jt->outmaxlen||IMAX==jt->outmaxbefore||IMAX==jt->outmaxafter){
   GAT0(z,FL, 4,1); u=DAV(z);
   u[0]=(D)jt->outeol;
@@ -102,15 +109,18 @@ F1(jtoutparmq){A z;D*u;I*v;
   u[2]=jt->outmaxbefore==IMAX?inf:(D)jt->outmaxbefore;
   u[3]=jt->outmaxafter==IMAX?inf:(D)jt->outmaxafter;
  }else{
-  GAT0(z,INT,4,1); v= AV(z);
-  v[0]=jt->outeol;
-  v[1]=jt->outmaxlen;
-  v[2]=jt->outmaxbefore;
-  v[3]=jt->outmaxafter;
- }
+#else
+ GAT0(z,INT,4,1); v= AV(z);
+ v[0]=jt->outeol;
+ v[1]=jt->outmaxlen;
+ v[2]=jt->outmaxbefore;
+ v[3]=jt->outmaxafter;
+// obsolete  }
+#endif
  RETF(z);
 }
 
+// 9!:37
 F1(jtoutparms){I*v;
  RZ(w=vib(w));
  ASSERT(1==AR(w),EVRANK);
@@ -121,9 +131,9 @@ F1(jtoutparms){I*v;
  ASSERT(0<=v[2],EVDOMAIN);
  ASSERT(0<=v[3],EVDOMAIN);
  jt->outeol      =(UC)v[0];
- jt->outmaxlen   =v[1];
- jt->outmaxbefore=v[2];
- jt->outmaxafter =v[3];
+ jt->outmaxlen   =MIN(0x7fffffff,v[1]);
+ jt->outmaxbefore=MIN(0x7fffffff,v[2]);
+ jt->outmaxafter =MIN(0x7fffffff,v[3]);
  R mtv;
 }
 
@@ -177,7 +187,7 @@ F1(jtsysparmq){I k;
 }}
 
 F1(jtsysparms){A*wv;I k,m;
- RZ(w);
+ ARGCHK1(w);
  ASSERT(BOX&AT(w),EVDOMAIN);
  ASSERT(1==AR(w),EVRANK);
  ASSERT(2==AN(w),EVLENGTH);
@@ -213,7 +223,7 @@ F1(jtxepq){
 }
 
 F1(jtxeps){
- RZ(w);
+ ARGCHK1(w);
  ASSERT(1>=AR(w),EVRANK);
  ASSERT(!AN(w)||AT(w)&LIT,EVDOMAIN);
  fa(jt->xep);
@@ -230,6 +240,7 @@ F1(jtasgzombs){I k;
  R mtm;
 }
 
+#if 0 // obsolete 
 // 9!:54/55  undocumented
 // unicodex78;       /* 1 iff disallow numeric argument for 7 8 u:      */
 F1(jtunicodex78q){
@@ -243,11 +254,12 @@ F1(jtunicodex78s){I k;
  jt->unicodex78=(C)k;
  R mtm;
 }
+#endif
 
 // 9!:56  undocumented
 // query/override cpu feature
 F1(jtcpufeature){
- RZ(w);
+ ARGCHK1(w);
  ASSERT(AT(w)&LIT,EVDOMAIN);
  ASSERT(AN(w),EVLENGTH);
  ASSERT(1>=AR(w),EVRANK);
@@ -316,7 +328,7 @@ F1(jtcpufeature){
 
 // thread unsafe
 F2(jtcpufeature2){I k;
- RZ(a&&w);
+ ARGCHK2(a,w);
  ASSERT(AT(w)&LIT,EVDOMAIN);
  ASSERT(AN(w),EVLENGTH);
  ASSERT(1>=AR(w),EVRANK);
@@ -426,7 +438,7 @@ R mtm;
 // 2 zgemm_thres  complex threshold
 
 F1(jtgemmtune){I k;
- RZ(w);
+ ARGCHK1(w);
  ASSERT(AT(w)&(B01+INT),EVDOMAIN);
  ASSERT(1==AN(w),EVLENGTH);
  ASSERT(1>=AR(w),EVRANK);
@@ -436,7 +448,7 @@ F1(jtgemmtune){I k;
 }
 
 F2(jtgemmtune2){I j,k;
- RZ(a&&w);
+ ARGCHK2(a,w);
  ASSERT(AT(a)&(B01+INT),EVDOMAIN);
  ASSERT(1==AN(a),EVLENGTH);
  ASSERT(1>=AR(a),EVRANK);

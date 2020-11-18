@@ -52,7 +52,9 @@ and continue through various inputs to see the flow
  
 *** jfe repl (read/execute/print/loop)
  s=input()
- call jdo(s)           ---------> jdo() calls immex(inpl(sentence))
+ call jdo(s)           ---------> jdo() calls ddtokens(sentence)
+   input()   (optional) <-------- if DD seen, get more lines if needed by calling jt->sminput
+                                  jdo() calls immex(inpl(sentence))
                                    ... 
    output(s)           <--------  jsto(type,s) - jt->smoutout(type,s)
    output returns      ---------> ...
@@ -77,16 +79,22 @@ and continue through various inputs to see the flow
                                      loop as long as suspended
                                        call jgets()
    input()            <---------       call jt->sminput()
-   return line        --------->       call immex(inpl(line)
-                                     loop
+   return line        --------->
+   input()   (optional) <--------      if DD seen, get more lines if needed by calling jt->sminput
+                                       call immex(inpl(line)
+                                       loop
 *** m : 0
 similar to debug suspension except jgets() lines added  to defn.  m : 0 stops reading
-after encountering ) on a line by itself
+after encountering ) on a line by itself.  If not 0 : 0, call ddtokens() after each line
+to see if more lines need to be read to finish the DD; is so, call jgets() to get them
 
 *** script load
 linf() is called first to read in all lines.  It sets jt->dcs to indicate that fact.  Thereafter
 all calls to jgets() return llies from the file without calling jt->sminput().
 jgets() calls advl() to advance through the lines, returns 0 for EOF.  Error is possible.
+
+The lines are executed one by one.  Before each is executed, ddtokens() is called to see if more lines
+are needed to finish a DD.
 
 *** jwd (11!:x)
 similar to debug suspension except output/input
@@ -96,6 +104,12 @@ similar to debug suspension except output/input
 jt->nfe flag - JE does not use jt->smoutout() and jt->sminput()
 instead it calls J code that provides equivalent services
 JHS routines are J socket code to talk with javascript browser page
+
+DD NOTE: DD is not supported on special sentences: iep, xep, dbssexec, dbtrap.  This is mostly because I don't understand how these work.
+
+DD is supported on ". y, but only if the DD is fully contained in the string
+A recursive JDo may use a DD, but only if it is fully contained in the string
+
 */
 
 #ifdef _WIN32
@@ -119,16 +133,18 @@ JHS routines are J socket code to talk with javascript browser page
 
 extern void dllquit(J);
 
-void jtwri(J jt,I type,C*p,I m,C*s){C buf[1024],*t=jt->outseq,*v=buf;I c,d,e,n;
- if(jt->tostdout){
+// flags in jt indicate whether display is suppressed.  p is the prompt, s is the text.  suppression of s happen when it is created;
+// here we control suppression of p; but we suppress all anyway
+void jtwri(J jt,I type,C*p,I m,C*s){F1PREFJT;C buf[1024],*t=OUTSEQ,*v=buf;I c,d,e,n;
+ if(!((I)jtinplace&JTPRNOSTDOUT)){  // if the prompt is not suppressed...
   c=strlen(p);            /* prompt      */
   e=strlen(t);            /* end-of-line */
   n=sizeof(buf)-(c+e+1);  /* main text   */
   d=m>n?n-3:m;
   MC(v,p,c); v+=c;
   MC(v,s,d); v+=d; if(m>n){MC(v,"...",3L); v+=3;}
-  MC(v,t,e); v+=e; 
-  *v=0;
+  MC(v,t,e); v+=e;   // join prompt/body/EOL
+  *v=0;   // NUL termination
 #ifdef ANDROID
   A z=tocesu8(str(strlen(buf),buf));
   CAV(z)[AN(z)]=0;
@@ -136,7 +152,8 @@ void jtwri(J jt,I type,C*p,I m,C*s){C buf[1024],*t=jt->outseq,*v=buf;I c,d,e,n;
 #else
   jsto(jt,type,buf);
 #endif
-}}
+ }
+}
 
 static void jtwrf(J jt,I n,C*v,F f){C*u,*x;I j=0,m;
  while(n>j){
@@ -177,7 +194,7 @@ void breakclose(J jt);
 static C* nfeinput(J jt,C* s){A y;
  jt->adbreakr=&breakdata; y=exec1(cstr(s)); jt->adbreakr=jt->adbreak;
  if(!y){breakclose(jt);exit(2);} /* J input verb failed */
- jtwri(jt,MTYOLOG,"",strlen(CAV(y)),CAV(y));
+ jtwri(jt,MTYOLOG,"",strlen(CAV(y)),CAV(y));  // call to nfeinput() comes from a prompt or from jdo.  In either case we want to display the result.  Thus jt
  return CAV(y); /* don't combine with previous line! CAV runs (x) 2 times! */
 }
 
@@ -195,7 +212,7 @@ A jtjgets(J jt,C*p){A y;B b;C*v;I j,k,m,n;UC*s;
   jt->dcs->dcj=k=j;  // k=start index
   jt->dcs->dcix=j=advl(j,n,s);  // j=end+1 index
   m=j-k; if(m&&32>s[k+m-1])--m; if(m&&32>s[k+m-1])--m;  // m is length; discard trailing control characters (usually CRLF, but not necessarily) ?not needed: done in inpl
-  jtwri(jt,MTYOLOG,p,m,k+s);  // log the input
+  jtwri((J)((I)jt+jt->dcs->dcpflags),MTYOLOG,p,m,k+s);  // log the input, but only if we wanted to echo the input
   R inpl(b,m,k+s);  // process & return the line
  }
  /* J calls for input in 3 cases:
@@ -204,14 +221,15 @@ A jtjgets(J jt,C*p){A y;B b;C*v;I j,k,m,n;UC*s;
     1!:1[1 read from keyboard */
  // if we are already prompting, a second prompt would be unrecoverable & we fail this request
  ASSERT(jt->recurstate<RECSTATEPROMPT,EVCTRL)
- showerr();  // if there is an error at this point, display it (shouldn't happen)
+ showerr();  // if there is an error at this point, display it (shouldn't happen)   use jt to force typeout
  // read from the front end. This is either through the nfe path or via the callback to the FE
- jt->recurstate=RECSTATEPROMPT;  // advance to PROMPT state
- if(jt->nfe)
+ if(jt->nfe){
   // Native Front End
-  v=nfeinput(jt,*p?"input_jfe_'      '":"input_jfe_''");
- else{
+  jt->recurstate=RECSTATEPROMPT;  // advance to PROMPT state
+  v=nfeinput(jt,*p?"input_jfe_'      '":"input_jfe_''");   // use jt so always emit prompt
+ }else{
   ASSERT(jt->sminput,EVBREAK); 
+  jt->recurstate=RECSTATEPROMPT;  // advance to PROMPT state
   v=((inputtype)(jt->sminput))(jt,p);
  }
  jt->recurstate=RECSTATEBUSY;  // prompt complete, go back to normal running state
@@ -252,7 +270,7 @@ void breakclose(J jt)
 #endif
 
 F1(jtjoff){I x;
- RZ(w);
+ ARGCHK1(w);
  x=i0(w);
  jt->jerr=0; jt->etxn=0; /* clear old errors */
  if(jt->sesm)jsto(jt, MTYOEXIT,(C*)x); else JFree(jt);
@@ -272,14 +290,16 @@ I jdo(J jt, C* lp){I e;A x;
  A *old=jt->tnextpushp;
  *jt->adbreak=0;
  x=inpl(0,(I)strlen(lp),lp);
+ // All these immexes run with result-display enabled (jt flags=0)
  // Run any enabled immex sentences both before & after the line being executed.  I don't understand why we do it before, but it can't hurt since there won't be any.
  // BUT: don't do it if the call is recursive.  The user might have set the iep before a prompt, and won't expect it to be executed asynchronously
- if(likely(jt->recurstate<RECSTATEPROMPT))while(jt->iepdo&&jt->iep){jt->iepdo=0; immex(jt->iep); if(savcallstack==0)CALLSTACKRESET jt->jerr=0; tpop(old);}
- if(!jt->jerr)immex(x);
+ if(likely(jt->recurstate<RECSTATEPROMPT))while(jt->iepdo&&jt->iep){jt->iepdo=0; immex(jt->iep); if(savcallstack==0)CALLSTACKRESET MODESRESET jt->jerr=0; tpop(old);}
+ // Check for DDs in the input sentence.  If there is one, call jgets() to finish it.  Result is enqueue()d sentence.  If recursive, don't allow call to jgets()
+ x=ddtokens(x,(((jt->recurstate&RECSTATEPROMPT)<<(2-1)))+1+(AN(jt->locsyms)>1)); if(!jt->jerr)immex(x);  // allow reads from jgets() if not recursive; return enqueue() result
  e=jt->jerr;
- if(savcallstack==0)CALLSTACKRESET jt->jerr=0;
- if(likely(jt->recurstate<RECSTATEPROMPT))while(jt->iepdo&&jt->iep){jt->iepdo=0; immex(jt->iep); if(savcallstack==0)CALLSTACKRESET jt->jerr=0; tpop(old);}
- showerr();
+ if(savcallstack==0)CALLSTACKRESET MODESRESET jt->jerr=0;
+ if(likely(jt->recurstate<RECSTATEPROMPT))while(jt->iepdo&&jt->iep){jt->iepdo=0; immex(jt->iep); if(savcallstack==0)CALLSTACKRESET MODESRESET jt->jerr=0; tpop(old);}
+ showerr();   // jt flags=0 to force typeout
  spfree();
  tpop(old);
  R e;
@@ -302,7 +322,7 @@ C* getlocale(J jt){A y=locname(mtv); y=AAV(y)[0]; R CAV(str0(y));}
 DF1(jtwd){A z=0;C*p=0;D*pd;I e,*pi,t;V*sv;
   F1PREFIP;
   F1RANK(1,jtwd,self);
-  RZ(w);
+  ARGCHK1(w);
   ASSERT(2>AR(w),EVRANK);
   sv=VAV(self);
   t=i0(sv->fgh[1]);  // the n arg from the original 11!:n
@@ -322,6 +342,10 @@ DF1(jtwd){A z=0;C*p=0;D*pd;I e,*pi,t;V*sv;
     }
   }
   RZ(w=jtmemu(jtinplace,w));
+  // Now call the host and get the response
+  // Calling the Host takes us out of BUSY state, back to IDLE.  (If for some reason we are prompting, that is not affected)
+  // That is, while we are waiting for the reply we are back to interruptible state.  If the interrupt issues another wd,
+  // that too is interruptible, for as many levels as needed.
 // t is 11!:t and w is wd argument
 // smoption:
 //   1=pass current locale
@@ -329,16 +353,21 @@ DF1(jtwd){A z=0;C*p=0;D*pd;I e,*pi,t;V*sv;
 //   4=use smpoll to get last result
 //   8=multithreaded
 // smdowd = function pointer to Jwd, if NULL nothing will be called
+  ASSERT(jt->smdowd,EVDOMAIN);
+  jt->recurstate&=~RECSTATEBUSY;  // back to IDLE/PROMPT state
   if(SMOPTLOCALE&jt->smoption) {
 // pass locale as parameter of callback
-    e=jt->smdowd ? ((dowdtype2)(jt->smdowd))(jt, (int)t, w, &z, getlocale(jt)) : EVDOMAIN;
+// obsolete     e= jt->smdowd? ((dowdtype2)(jt->smdowd))(jt, (int)t, w, &z, getlocale(jt)) : EVDOMAIN;
+    e=((dowdtype2)(jt->smdowd))(jt, (int)t, w, &z, getlocale(jt));
   } else {
 // front-end will call getlocale() inside callback
-    e=jt->smdowd ? ((dowdtype)(jt->smdowd))(jt, (int)t, w, &z) : EVDOMAIN;
+// obsolete     e=jt->smdowd ? ((dowdtype)(jt->smdowd))(jt, (int)t, w, &z) : EVDOMAIN;
+    e=((dowdtype)(jt->smdowd))(jt, (int)t, w, &z);
   }
+  jt->recurstate|=RECSTATEBUSY;  // wd complete, go back to normal running state, BUSY normally or RECUR if a prompt is pending
   if(!e) R mtm;   // e==0 is MTM
   ASSERT(e<=0,e); // e>=0 is EVDOMAIN etc
-  if(SMOPTPOLL&jt->smoption) RZ(z=(A)((polltype)(jt->smpoll))(jt, (int)t, (int)e)); // alternate way to get result aftercallback, but not yet used in any front-end
+  if(SMOPTPOLL&jt->smoption){jt->recurstate=RECSTATEPROMPT; z=(A)((polltype)(jt->smpoll))(jt, (int)t, (int)e); jt->recurstate=RECSTATEBUSY; RZ(z);} // alternate way to get result aftercallback, but not yet used in any front-end
   if(SMOPTNOJGA&jt->smoption) z=ca(z);  // front-end promised not to use Jga to allocate memory, but not yet used in any front-end
   if(e==-2){      // e==-2 is lit pairs
 // callback result z is a rank-1 literal array 
@@ -374,7 +403,7 @@ int _stdcall JDo(J jt, C* lp){int r; UI savcstackmin, savcstackinit, savqtstacki
   jt->cstackmin=savcstackmin, jt->cstackinit=savcstackinit, jt->qtstackinit=savqtstackinit;  // restore stack pointers after recursion
  }
  while(jt->nfe){  // nfe normally loops here forever
-  A *old=jt->tnextpushp; r=(int)jdo(jt,nfeinput(jt,"input_jfe_'   '")); tpop(old);
+  A *old=jt->tnextpushp; r=(int)jdo(jt,nfeinput(jt,"input_jfe_'   '")); tpop(old);  // use jt to force output in nfeinput
  }
  R r;
 } 
@@ -525,13 +554,20 @@ void jsto(J jt,I type,C*s){C e;I ex;
  if(jt->nfe)
  {
   // here for Native Front End state, toggled by 15!:16
-  C q[]="0 output_jfe_ (15!:18)0";
-  q[0]+=(C)type;
-  jt->mtyostr=s;
-  e=jt->jerr; ex=jt->etxn;
+  // we execute the sentence:  type output_jfe_ s
+  fauxblockINT(fauxtok,3,1); A tok; fauxBOXNR(tok,fauxtok,3,1);  // allocate 3-word sentence on stack, rank 1
+  AAV1(tok)[0]=num(type); AAV1(tok)[1]=nfs(11,"output_jfe_"); AAV1(tok)[2]=cstr(s);  // the sentence to execute, tokenized
+// obsolete   C q[]="0 output_jfe_ (15!:18)0";
+// obsolete   q[0]+=(C)type;
+// obsolete   jt->mtyostr=s;
+  e=jt->jerr; ex=jt->etxn;   // save error state before running the output sentence
   jt->jerr=0; jt->etxn=0;
-  jt->adbreakr=&breakdata;exec1(cstr(q));jt->adbreakr=jt->adbreak;
-  jt->jerr=e; jt->etxn=ex; 
+  jt->adbreakr=&breakdata;
+// obsolete   exec1(cstr(q));
+  parse(tok);  // run it, ignoring errors.  always reset jt->asgn after every execution has had its chance to type
+// obsolete  jt->asgn=0;
+  jt->adbreakr=jt->adbreak;
+  jt->jerr=e; jt->etxn=ex; // restore
  }else{
   // Normal output.  Call the output routine
   if(jt->smoutput){((outputtype)(jt->smoutput))(jt,(int)type,s);R;} // JFE output
@@ -579,7 +615,7 @@ int JFree(J jt){
   if(!jt) R 0;
   breakclose(jt);
   jt->jerr=0; jt->etxn=0; /* clear old errors */
-  if(jt->xep&&AN(jt->xep)){A *old=jt->tnextpushp; immex(jt->xep); fa(jt->xep); jt->xep=0; jt->jerr=0; jt->etxn=0; tpop(old); }
+  if(jt->xep&&AN(jt->xep)){A *old=jt->tnextpushp; immex(jt->xep); fa(jt->xep); jt->xep=0; jt->jerr=0; jt->etxn=0; tpop(old); }  // run with typeout enabled
   dllquit(jt);  // clean up call dll
   free(jt->heap);  // free the initial allocation
   R 0;
@@ -729,7 +765,7 @@ int _stdcall JErrorTextM(J jt, I ec, I* p)
 #if 0
 int enabledebug=0;
 F1(jttest1){
- RZ(w);
+ ARGCHK1(w);
  if((AT(w)&B01+INT)&&AN(w)){
   enabledebug=i0(w);
  }

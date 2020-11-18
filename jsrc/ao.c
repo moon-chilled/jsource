@@ -11,7 +11,7 @@
 
 // This is the derived verb for f/. y
 static DF1(jtoblique){A x,y,z;I m,n,r;D rkblk[16];
- RZ(w);F1PREFIP;
+ F1PREFIP;ARGCHK1(w);
  r=AR(w);  // r = rank of w
  // create y= ,/ w - the _2-cells of w arranged in a list (virtual block)
  RZ(y=redcat(w,self)); if(1>=r){m=AN(w); n=1;}else{m=AS(w)[0]; n=AS(w)[1];}
@@ -40,7 +40,7 @@ static DF1(jtoblique){A x,y,z;I m,n,r;D rkblk[16];
 
 // Derived verb for f//. y for atomic f
 static DF1(jtobqfslash){A y,z;B b=0,p;C er,id,*wv;I c,d,k,m,m1,mn,n,n1,r,*s,wt;
- RZ(w);
+ ARGCHK1(w);
  r=AR(w); s=AS(w); wt=AT(w); wv=CAV(w);
  if((-AN(w)&(1-r)&-(DENSE&wt))>=0)R oblique(w,self);  // revert to default if rank<2, empty, or sparse.  This implies m/n below are non0
  y=FAV(self)->fgh[0]; y=FAV(y)->fgh[0]; id=FAV(y)->id;
@@ -106,7 +106,7 @@ static DF1(jtobqfslash){A y,z;B b=0,p;C er,id,*wv;I c,d,k,m,m1,mn,n,n1,r,*s,wt;
  }}
 
 DF2(jtpolymult){A f,g,z;B b=0;C*av,c,d,*wv;I at,i,j,k,m,m1,n,p,t,wt,zn;V*v;
- RZ(a&&w&&self);
+ ARGCHK3(a,w,self);
  ASSERT(!((AT(a)|AT(w))&SPARSE),EVNONCE);
  m=AN(a); n=AN(w); m1=m-1; zn=m+n-1; k=MIN(m,n);
  at=AT(a); wt=AT(w); t=maxtyped(at,wt);
@@ -165,7 +165,7 @@ DF2(jtpolymult){A f,g,z;B b=0;C*av,c,d,*wv;I at,i,j,k,m,m1,n,p,t,wt,zn;V*v;
 static DF2(jtkey);
 
 static DF2(jtkeysp){PROLOG(0008);A b,by,e,q,x,y,z;I j,k,n,*u,*v;P*p;
- RZ(a&&w);
+ ARGCHK2(a,w);
  {I t2; ASSERT(SETIC(a,n)==SETIC(w,t2),EVLENGTH);}  // verify agreement.  n is # items of a
  RZ(q=indexof(a,a)); p=PAV(q); 
  x=SPA(p,x); u=AV(x);
@@ -184,8 +184,8 @@ static DF2(jtkeysp){PROLOG(0008);A b,by,e,q,x,y,z;I j,k,n,*u,*v;P*p;
 
 // a u/. w.  Self-classify a, then rearrange w and call cut.  Includes special cases for f//.
 static DF2(jtkey){F2PREFIP;PROLOG(0009);A ai,z=0;I nitems;
- RZ(a&&w);
- if(unlikely(SPARSE&AT(a)))R keysp(a,w,self);  // if sparse, go handle it
+ ARGCHK2(a,w);
+ if(unlikely((SPARSE&AT(a))!=0))R keysp(a,w,self);  // if sparse, go handle it
  {I t2; ASSERT(SETIC(a,nitems)==SETIC(w,t2),EVLENGTH);}  // verify agreement.  nitems is # items of a
  RZ(ai=indexofsub(IFORKEY,a,a));   // self-classify the input using ct set before this verb
  // indexofsub has 2 returns: most of the time, it returns a normal i.-family result, but with each slot holding the index PLUS the number of values
@@ -196,6 +196,7 @@ static DF2(jtkey){F2PREFIP;PROLOG(0009);A ai,z=0;I nitems;
  I cellatoms; PROD(cellatoms,AR(w)-1,AS(w)+1);   // length of a cell of w, in atoms
  // if this is a supported f//., handle it without calling cut.  We can take it if the flag says f//. and the rank is >1 or the type is one we can do cheaply: B01/INT/FL 
  if(unlikely(SZI==SZD&&FAV(self)->flag&VFKEYSLASHT)){  // f//. where f is + >. <. mean   Implementation requires SZI==SZD
+  // start of f//. on special cases
   if((((AR(w)-2)|((AT(w)&CMPX+XNUM+RAT)-1))&((AT(w)&FAV(self)->flag&VFKEYSLASHT)-1))>=0){  // rank>=2 and extended, or type we can handle locally  flag is B01+INT+FL for <. >., B01+FL for +  (we don't handle int ovfl)
    // We are going to handle the //. locally
    A freq;  // for mean, save frequencies here
@@ -373,10 +374,10 @@ static DF2(jtkey){F2PREFIP;PROLOG(0009);A ai,z=0;I nitems;
    // Finally, if this was mean, divide the total by the frequency
    if(unlikely(((FAV(self)->flag&VFKEYSLASHF)>>VFKEYSLASHFX)==3)){z=divideAW(z,freq);}  // always inplaceable
    EPILOG(z);
-  }
+  }  // end 'locally handled arg types'
  }
 
- // Here it wasn't fspecial//. - reorder the input and create frets
+ // ** Here it wasn't fspecial//. - reorder the input and create frets
  // Allocate the area for the reordered copy of the input.  Do these calls early to free up registers for the main loop
  A frets,wperm;  // fret block, and place to reorder w
  UC *fretp;  // where the frets will be stored
@@ -399,7 +400,7 @@ static DF2(jtkey){F2PREFIP;PROLOG(0009);A ai,z=0;I nitems;
   // NOT small-range processing: go through the index+size table to create the frets and reordered data for passing to cut
   nfrets=AM(ai);  //fetch # frets before we possibly clone ai
   I maxfretsize=(nitems>>8); maxfretsize=maxfretsize<nfrets?nfrets:maxfretsize; maxfretsize=4*maxfretsize+nfrets+1;  // max # bytes needed for frets, if some are long
-  if((UI)maxfretsize<sizeof(localfrets)-NORMAH*SZI){frets=(A)localfrets; AT(frets)=0;} // Cut tests the type field - only
+  if((UI)maxfretsize<sizeof(localfrets)-NORMAH*SZI){frets=(A)localfrets; AT(frets)=0; if(MEMAUDIT&0xc)AFLAG(frets)=0;} // Cut tests the type field - only.  If debug, the flag also
   else if((I)jtinplace&(I)((AFLAG(w)&(AFVIRTUAL|AFNJA))==0)&((UI)((-(I )(AT(w)&DIRECT))&AC(w)&(4-celllen)&((I )(SZI==4)-AR(w)))>>(BW-1-JTINPLACEWX)))frets=w;
   else GATV0(frets,LIT,maxfretsize,0);   // 1 byte per fret is adequate, since we have padding
   fretp=CUTFRETFRETS(frets);  // Place where we will store the fret-lengths.  They are 1 byte normally, or 5 bytes for groups longer than 254
@@ -442,7 +443,7 @@ static DF2(jtkey){F2PREFIP;PROLOG(0009);A ai,z=0;I nitems;
   av=IAV(a); DQ(nitems, I tval=ftblv[*av&valmsk]; ftblv[*av&valmsk]=tval-1; nfrets-=SGNTO0(tval); av=(I*)((I)av+k);)   // build (negative) frequency table; sub 1 for each non-fret
   // now that we have the number of freats, we can allocate the fret block
   I maxfretsize=(nitems>>8); maxfretsize=maxfretsize<nfrets?nfrets:maxfretsize; maxfretsize=4*maxfretsize+nfrets+1;  // max # bytes needed for frets
-  if((UI)maxfretsize<sizeof(localfrets)-NORMAH*SZI){frets=(A)localfrets; AT(frets)=0;} // Cut tests the type field - obly
+  if((UI)maxfretsize<sizeof(localfrets)-NORMAH*SZI){frets=(A)localfrets; AT(frets)=0; if(MEMAUDIT&0xc)AFLAG(frets)=0;} // Cut tests the type field - only; for memaudit we need flag too
   else if((I)jtinplace&(I)((AFLAG(w)&(AFVIRTUAL|AFNJA))==0)&((UI)((-(I)(AT(w)&DIRECT))&AC(w)&(4-celllen)&((I)(SZI==4)-AR(w)))>>(BW-1-JTINPLACEWX)))frets=w;
   else GATV0(frets,LIT,maxfretsize,0);   // 1 byte per fret is adequate, since we have padding
   fretp=CUTFRETFRETS(frets);  // Place where we will store the fret-lengths.  They are 1 byte normally, or 5 bytes for groups longer than 254
@@ -496,12 +497,12 @@ static DF2(jtkey){F2PREFIP;PROLOG(0009);A ai,z=0;I nitems;
 
 // bivalent entry point: a </. w   or  (</. i.@#) w
 DF2(jtkeybox){F2PREFIP;PROLOG(0009);A ai,z=0;I nitems;
- RZ(a&&w);  // we don't neep ip, but all jtkey dyads must support it
- if(unlikely(SPARSE&AT(a)))R (AT(w)&NOUN?(AF)jtkeysp:(AF)jthook1cell)(jt,a,w,self);  // if sparse, go handle it
+ ARGCHK2(a,w);  // we don't neep ip, but all jtkey dyads must support it
+ if(unlikely((SPARSE&AT(a))!=0))R (AT(w)&NOUN?(AF)jtkeysp:(AF)jthook1cell)(jt,a,w,self);  // if sparse, go handle it
  SETIC(a,nitems);   // nitems is # items in a and w
  I cellatoms, celllen;  // number of atoms in an item of w, and the number of bytes therein.  celllen is negative for the monad
  struct AD fauxw;  // needed only for (</. i.@#) but must stay in scope
- if(likely(AT(w)&NOUN)){
+ if(likely((AT(w)&NOUN)!=0)){
   // dyad: </.
   I t2; ASSERT(nitems==SETIC(w,t2),EVLENGTH);  // verify agreement
   PROD(cellatoms,AR(w)-1,AS(w)+1);   // length of a cell of w, in atoms
@@ -531,7 +532,7 @@ DF2(jtkeybox){F2PREFIP;PROLOG(0009);A ai,z=0;I nitems;
   I nboxes=AM(ai);  //fetch # frets before we possibly clone ai
   makewritable(ai);  // we modify the size+index info to be running endptrs into the reorder area
   // allocate the result, which will be recursive, and set up to fill it with blocks off the tstack
-  GATV0(z,BOX,nboxes,1); if(nboxes==0)RETF(z); // allocate result, and exit if empty for comp ease below
+  GATV0(z,BOX,nboxes,1); if(nboxes==0){RETF(z);} // allocate result, and exit if empty for comp ease below
   // boxes will be in AAV(z), in order.  Details of hijacking tnextpushp are discussed in jtbox().
   // We have to do it a little differently here, because when we allocate a block the contents come in piecemeal and we have no
   // convenient time to INCORPRA the new contents.  So instead we leave the outer box non-recursive, and rely on the EPILOG to make
@@ -589,7 +590,7 @@ DF2(jtkeybox){F2PREFIP;PROLOG(0009);A ai,z=0;I nitems;
   I nboxes=0;  // initialize fret counter, incremented for each fret
   av=IAV(a); DQ(nitems, I tval=ftblv[*av&valmsk]; ftblv[*av&valmsk]=++tval; nboxes+=tval==freqminval; av=(I*)((I)av+k);)   // build (negative) frequency table; sub 1 for each non-fret
   // allocate the result, which will be recursive, and set up to fill it with blocks off the tstack
-  GATV0(z,BOX,nboxes,1); if(nboxes==0)RETF(z); // allocate result, and exit if empty for comp ease below
+  GATV0(z,BOX,nboxes,1); if(nboxes==0){RETF(z);} // allocate result, and exit if empty for comp ease below
   // boxes will be in AAV(z), in order.  Details discussed in jtbox().
   // We will later make the block recursive usecount, and we will set all the initial usecounts to 1 since they are not on the tpop stack
   pushxsave = jt->tnextpushp; jt->tnextpushp=AAV(z);  // save tstack info before allocation
@@ -644,7 +645,7 @@ const UI4 shortrange[3][4] = {{0,65536,65536,0}, {0,2,258,0}, {0,256,65536,0}}; 
 static DF2(jtkeytally);
 
 static F1(jtkeytallysp){PROLOG(0015);A b,e,q,x,y,z;I c,d,j,k,*u,*v;P*p;
- RZ(w);
+ ARGCHK1(w);
  RZ(q=indexof(w,w));
  p=PAV(q); 
  x=SPA(p,x); u=AV(x); c=AN(x);
@@ -659,11 +660,11 @@ static F1(jtkeytallysp){PROLOG(0015);A b,e,q,x,y,z;I c,d,j,k,*u,*v;P*p;
 }    /* x #/.y , sparse x */
 
 static DF2(jtkeytally){F2PREFIP;PROLOG(0016);A z,q;I at,j,k,n,r,s,*qv,*u,*v;
- RZ(a&&w);  // we don't neep ip, but all jtkey dyads must support it
+ ARGCHK2(a,w);  // we don't neep ip, but all jtkey dyads must support it
  SETIC(a,n); at=AT(a);
  ASSERT(n==SETIC(w,k),EVLENGTH);
  if(!AN(a))R vec(INT,!!n,&AS(a)[0]);  // handle case of empties - a must have rank, so use AS[0] as  proxy for n
- if(unlikely(at&SPARSE))R keytallysp(a);
+ if(unlikely((at&SPARSE)!=0))R keytallysp(a);
  if((-n&SGNIF(at,B01X)&(AR(a)-2))<0){B*b=BAV(a); k=bsum(n,b); R BETWEENO(k,1,n)?v2(*b?k:n-k,*b?n-k:k):vci(n);}  // nonempty rank<2 boolean a, just add the 1s
  A ai;  // result from classifying a
  RZ(ai=indexofsub(IFORKEY,a,a));   // self-classify the input using ct set before this verb
@@ -701,24 +702,35 @@ static DF2(jtkeytally){F2PREFIP;PROLOG(0016);A z,q;I at,j,k,n,r,s,*qv,*u,*v;
 }    /* x #/.y main control & dense x */
 
 
-static DF2(jtkeyheadtally){F2PREFIP;PROLOG(0017);A f,q,x,y,z;I b;I at,*av,k,n,r,*qv,*u,*v,wt,*zv;
- RZ(a&&w);  // we don't neep ip, but all jtkey dyads must support it
+//  bivalent entry point for x ({.,#)/.y or x (#,{.)/. y (dyad), or (({.,#)/. i.@#) y or ((#,{.)/. i.@#) y  (monad)
+DF2(jtkeyheadtally){F2PREFIP;PROLOG(0017);A f,q,x,y,z;I b;I at,*av,k,n,r,*qv,*u,*v,wt,*zv;
+ ARGCHK2(a,w);  // we don't neep ip, but all jtkey dyads must support it
  SETIC(a,n); wt=AT(w);
- ASSERT(n==SETIC(w,k),EVLENGTH);
- ASSERT((-n&((wt&NUMERIC)-1))>=0,EVDOMAIN); // OK if n=0 or numeric w
- if(unlikely((((SPARSE&AT(a))-1)&((I)AR(w)-2)&(-n)&(-AN(a)))>=0))R key(a,w,self);  // if sparse or w has rank>1 or a has no cells or no atoms, revert
+ if(likely((AT(w)&NOUN)!=0)){
+  // dyad: </.
+  ASSERT(n==SETIC(w,k),EVLENGTH);  // verify agreement
+  f=FAV(self)->fgh[0];  // f->({.,#)
+ }else{
+  // monad: (<./ i.@#)   In case of failover, set self right, and leave w pointing to self
+  f=FAV(FAV(w)->fgh[0])->fgh[0];  // f->({.,#), found inside (({.,#)/. i.@#)  left of hook, then go past /.
+ }
+ ASSERT((-n&((wt&NUMERIC+VERB)-1))>=0,EVDOMAIN); // OK if n=0 or numeric/i.@# w
+// obsolete  if(unlikely((((SPARSE&AT(a))-1)&((I)AR(w)-2)&(-n)&(-AN(a)))>=0))R key(a,w,self);  // if sparse or w has rank>1 or a has no cells or no atoms, revert
+ if(unlikely((((SPARSE&AT(a))-1)&((I)AR(w)-2)&(-n)&(-AN(a)))>=0))R wt&VERB?jthook1cell(jt,a,w):key(a,w,self);  // if sparse or w has rank>1 or a has no cells or no atoms, revert, to monad/dyad.  w=self for monad
  av=AV(a);
- f=FAV(self)->fgh[0]; f=VAV(f)->fgh[0]; b=CHEAD==ID(f);  // b is 1 for {.,#  0 for #,{.  i. e. index of tally
- if(AT(a)&B01&&1>=AR(a)){B*p=(B*)av;I i,j,m;  // first special case: boolean list/atom
-  if(*p){i=0; B *d=(B*)memchr(p,C0,n); j=d-p; j=d?j:0;} // i=index of first 1, j=index of first 0 (0 if not found)
-  else  {j=0; B *c=(B*)memchr(p,C1,n); i=c-p; i=c?i:0;}
+// obsolete  f=FAV(self)->fgh[0]; f=VAV(f)->fgh[0]; b=CHEAD==ID(f);  // b is 1 for {.,#  0 for #,{.  i. e. index of tally
+ f=FAV(f)->fgh[0]; b=CHEAD==ID(f);  // f-> left tine of (#,{.)  b is 1 for {.,#  0 for #,{.  i. e. index of tally
+ if(unlikely((AT(a)&B01)!=0))if(1>=AR(a)&&!(wt&VERB)){B*p=(B*)av;I i,j,m;  // first special case: boolean list/atom, for which we can handle all types (except VERB)
+// obsolete   if(*p){i=0; B *d=(B*)memchr(p,C0,n); j=d-p; j=d?j:0;} // i=index of first 1, j=index of first 0 (0 if not found)
+// obsolete   else  {j=0; B *c=(B*)memchr(p,C1,n); i=c-p; i=c?i:0;}
+  B *c=memchr(p,1^*p,n); i=c-p; i=c?i:0; j=i; i=*p?0:i; j=*p?j:0;  // i=index of first 1, j=index of first 0 (0 if not found)
   k=bsum(n,p); m=i+j?1:0;  // k=# 1s  m is 1 if there are 0s and 1s
   GATV0(x,INT,m+1,1); v=AV(x); v[m]=i+j; v[0]=0;  // 0=index of first item (always 0); 1 if it exists is the other
   GATV0(y,INT,m+1,1); v=AV(y); j=n-k; k=i?j:k; k&=-m; v[0]=k; v[m]=n-k;  // if 1st value is 0, complement k; if only 1 value, clear k
-  RZ(x=w=from(x,w)); x=b?x:y; y=b?y:w; R stitch(x,y);
+  if(!(wt&VERB))RZ(x=from(x,w)); w=x; x=b?x:y; y=b?y:w; R stitch(x,y);  // select using index (unless i.@#, then keep index); set order & ,.
  }
- // for other types of a, we handle it quickly only if w is B01/INT/FL
- if(wt&B01+INT+FL){
+ // for other types of a, we handle it quickly only if w is B01/INT/FL or i.@# which has type of VERB
+ if(wt&B01+INT+FL+VERB){
   A ai;  // result from classifying a
   RZ(ai=indexofsub(IFORKEY,a,a));   // self-classify the input using ct set before this verb
   // indexofsub has 2 returns: most of the time, it returns a normal i.-family result, but with each slot holding the index PLUS the number of values
@@ -737,15 +749,17 @@ static DF2(jtkeyheadtally){F2PREFIP;PROLOG(0017);A f,q,x,y,z;I b;I at,*av,k,n,r,
    // count tally and partition
    I *av=IAV(a); DQ(n, I of=ftblv[*av&valmsk]; ftblv[*av&valmsk]=of+1; nparts+=SGNTO0(of); av=(I*)((I)av+k);)   // count partitions and set pointers there to 0
    // allocate result area
-   GA(z,MAX(wt,INT),nparts*2,2,0); AS(z)[0]=nparts; AS(z)[1]=2;  // output area: one per partition
+   GA(z,MAX(wt&~VERB,INT),nparts*2,2,0); AS(z)[0]=nparts; AS(z)[1]=2;  // output area: one per partition
    // pass the input again, copying out the values.  Use branches to avoid the long carried dependency
    I i=0; av=IAV(a);   // item index and input scan pointer
    if(wt&INT){
     I *wv=IAV(w); I *zv=IAV(z); while(1){I of=ftblv[*av&valmsk]; ftblv[*av&valmsk]=-1; if(of>=0){zv[b]=of+1; zv[1-b]=wv[i]; if(--nparts==0)break; zv+=2;} av=(I*)((I)av+k); ++i;}
    }else if(wt&B01){
     B *wv=BAV(w); I *zv=IAV(z); while(1){I of=ftblv[*av&valmsk]; ftblv[*av&valmsk]=-1; if(of>=0){zv[b]=of+1; zv[1-b]=wv[i]; if(--nparts==0)break; zv+=2;} av=(I*)((I)av+k); ++i;}
-   }else{  // FL
+   }else if(wt&FL){  // FL
     D *wv=DAV(w); D *zv=DAV(z); while(1){I of=ftblv[*av&valmsk]; ftblv[*av&valmsk]=-1; if(of>=0){zv[b]=(D)(of+1); zv[1-b]=wv[i]; if(--nparts==0)break; zv+=2;} av=(I*)((I)av+k); ++i;}
+   }else{  // i.@#
+    I *zv=IAV(z); while(1){I of=ftblv[*av&valmsk]; ftblv[*av&valmsk]=-1; if(of>=0){zv[b]=of+1; zv[1-b]=i; if(--nparts==0)break; zv+=2;} av=(I*)((I)av+k); ++i;}
    }
   }else{
 
@@ -753,15 +767,17 @@ static DF2(jtkeyheadtally){F2PREFIP;PROLOG(0017);A f,q,x,y,z;I b;I at,*av,k,n,r,
    I nparts=AM(ai);  // before we possibly clone it, extract # frets found
    makewritable(ai);  // we modify the size+index info
    // allocate the result area
-   GA(z,MAX(wt,INT),nparts*2,2,0); AS(z)[0]=nparts; AS(z)[1]=2;  // output area: one per partition
+   GA(z,MAX(wt&~VERB,INT),nparts*2,2,0); AS(z)[0]=nparts; AS(z)[1]=2;  // output area: one per partition
    // pass through the table, writing out every value that starts a new partition.  The partition size is encoded in the value
    I i=0; I *av=IAV(ai);   // item index and input scan pointer
    if(wt&INT){
     I *wv=IAV(w); I *zv=IAV(z); while(1){I a0=*av++; if(a0-i>=0){zv[b]=a0-i; zv[1-b]=wv[i]; if(--nparts==0)break; zv+=2;} ++i;}
    }else if(wt&B01){
     B *wv=BAV(w); I *zv=IAV(z); while(1){I a0=*av++; if(a0-i>=0){zv[b]=a0-i; zv[1-b]=wv[i]; if(--nparts==0)break; zv+=2;} ++i;}
-   }else{  // FL
+   }else if(wt&FL){  // FL
     D *wv=DAV(w); D *zv=DAV(z); while(1){I a0=*av++; if(a0-i>=0){zv[b]=(D)(a0-i); zv[1-b]=wv[i]; if(--nparts==0)break; zv+=2;} ++i;}
+   }else{  // i.@#
+    I *zv=IAV(z); while(1){I a0=*av++; if(a0-i>=0){zv[b]=a0-i; zv[1-b]=i; if(--nparts==0)break; zv+=2;} ++i;}
    }
   }
  }else{  // no special processing
@@ -774,13 +790,13 @@ static DF2(jtkeyheadtally){F2PREFIP;PROLOG(0017);A f,q,x,y,z;I b;I at,*av,k,n,r,
 F1(jtsldot){A h=0;AF f1=jtoblique,f2;C c,d,e;I flag=VJTFLGOK1|VJTFLGOK2;V*v;
 // NOTE: u/. is processed using the code for u;.1 and passing the self for /. into the cut verb.  So, the self produced
 // by /. and ;.1 must be the same as far as flags etc.
- RZ(w);
+ ARGCHK1(w);
  if(NOUN&AT(w)){flag|=VGERL; RZ(h=fxeachv(1L,w));}
  v=VAV(w);
  switch(ID(w)){  // no default for f2: every path must set it
   case CPOUND: f2=jtkeytally; break;
   case CSLASH: f2=jtkey; if(AT(v->fgh[0])&VERB&&FAV(v->fgh[0])->flag&VISATOMIC2){ // f//.  if f is atomic2
-   /*scaf f2=jtkeyslash;*/ f1=jtobqfslash; flag&=~VJTFLGOK1;
+   f1=jtobqfslash; flag&=~VJTFLGOK1;
    // dyad f//. is special for f=+ >. <.   we set flags to indicate the operation and the allowed types
 #define keyslashvalues(w)CCM(w,CPLUS)+CCM(w,CMIN)+CCM(w,CMAX)
     CCMWDS(keyslash) CCMCAND(keyslash,cand,FAV(v->fgh[0])->id) if(CCMTST(cand,FAV(v->fgh[0])->id)){

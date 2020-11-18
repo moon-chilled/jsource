@@ -11,21 +11,25 @@
 
 
 // handle fork, with support for in-place operations
-#define FOLK1 {PUSHZOMB; A protw = (A)(intptr_t)((I)w+((I)jtinplace&JTINPLACEW));  \
+#define FOLK1 {PUSHZOMB; ARGCHK1D(w) A protw = (A)(intptr_t)((I)w+((I)jtinplace&JTINPLACEW));  \
 /* If any result equals protw, it must not be inplaced: if original w is inplaceable, protw will not match anything */ \
 /* the call to h is not inplaceable, but it may allow WILLOPEN and USESITEMCOUNT */ \
 A hx; RZ(hx=(h1)((J)(intptr_t)(((I)jt) + (REPSGN(SGNIF(FAV(hs)->flag,VJTFLGOK1X)) & (FAV(gs)->flag2>>(VF2WILLOPEN2WX-VF2WILLOPEN1X)) & VF2WILLOPEN1+VF2USESITEMCOUNT1)),w,hs)); \
+ARGCHK1D(hx) \
 /* the call to f is inplaceable if the caller allowed inplacing, and f is inplaceable, and the hx is NOT the same as y.  Here only the LSB of jtinplace is used */ \
 A fx; RZ(fx=(f1)((J)(intptr_t)(((I)jt) + (REPSGN(SGNIF(FAV(fs)->flag,VJTFLGOK1X)) & (((I)jtinplace&(I )(hx!=w)) + ((FAV(gs)->flag2>>(VF2WILLOPEN2AX-VF2WILLOPEN1X)) & VF2WILLOPEN1+VF2USESITEMCOUNT1)))),w,fs)); \
+ARGCHK2D(fx,hx) \
 /* The call to g is inplaceable if g allows it, UNLESS fx or hx is the same as disallowed y.  Pass in WILLOPEN from the input */ \
 POPZOMB; RZ(z=(g2)((J)(intptr_t)((((I)jtinplace&(~(JTINPLACEA+JTINPLACEW)))|((I )(fx!=protw)*JTINPLACEA+(I )(hx!=protw)*JTINPLACEW))&(REPSGN(SGNIF(FAV(gs)->flag,VJTFLGOK2X))|~JTFLAGMSK)),fx,hx,gs));}
 
-#define FOLK2 {PUSHZOMB; A protw = (A)(intptr_t)((I)w+((I)jtinplace&JTINPLACEW)); A prota = (A)(intptr_t)((I)a+((I)jtinplace&JTINPLACEA)); \
+#define FOLK2 {PUSHZOMB; ARGCHK2D(a,w) A protw = (A)(intptr_t)((I)w+((I)jtinplace&JTINPLACEW)); A prota = (A)(intptr_t)((I)a+((I)jtinplace&JTINPLACEA)); \
 /* the call to h is not inplaceable, but it may allow WILLOPEN and USESITEMCOUNT.  Inplace h if f is x@], but not if a==w  Actually we turn off all flags here if a==w, for comp ease */ \
 A hx; RZ(hx=(h2)((J)(intptr_t)(((I)jt) + ((-((FAV(hs)->flag>>VJTFLGOK2X)&(I )(a!=w))) & (((I)jtinplace&sv->flag&(VFATOPL|VFATOPR)) + ((FAV(gs)->flag2>>(VF2WILLOPEN2WX-VF2WILLOPEN1X)) & VF2WILLOPEN1+VF2USESITEMCOUNT1)))),a,w,hs)); \
+ARGCHK1D(hx) \
 /* If any result equals protw/prota, it must not be inplaced: if original w/a is inplaceable, protw/prota will not match anything */ \
 /* the call to f is inplaceable if the caller allowed inplacing, and f is inplaceable; but only where hx is NOT the same as x or y.  Both flags in jtinplace are used */ \
 A fx; RZ(fx=(f2)((J)(intptr_t)(((I)jt) + (REPSGN(SGNIF(FAV(fs)->flag,VJTFLGOK2X)) & (((I)jtinplace&(JTINPLACEA*(I )(hx!=a)+(I )(hx!=w))) + ((FAV(gs)->flag2>>(VF2WILLOPEN2AX-VF2WILLOPEN1X)) & VF2WILLOPEN1+VF2USESITEMCOUNT1)))),a,w,fs)); \
+ARGCHK2D(fx,hx) \
 /* The call to g is inplaceable if g allows it, UNLESS fx or hx is the same as disallowed y.  Pass in WILLOPEN from the input */ \
 POPZOMB; RZ(z=(g2)((J)(intptr_t)((((I)jtinplace&(~(JTINPLACEA+JTINPLACEW)))|(((I )(fx!=protw)&(I )(fx!=prota))*JTINPLACEA+((I )(hx!=protw)&(I )(hx!=prota)*JTINPLACEW)))&(REPSGN(SGNIF(FAV(gs)->flag,VJTFLGOK2X))|~JTFLAGMSK)),fx,hx,gs));}
 
@@ -51,11 +55,12 @@ DF1(jtcork1){F1PREFIP;DECLFGH;PROLOG(0026);A z;  CAP1; EPILOG(z);}
 DF2(jtcork2){F2PREFIP;DECLFGH;PROLOG(0027);A z;  CAP2; EPILOG(z);}
 
 static DF1(jtfolk1){F1PREFIP;DECLFGH;PROLOG(0028);A z; FOLK1; EPILOG(z);}
-static DF2(jtfolk2){F2PREFIP;DECLFGH;PROLOG(0029);A z; FOLK2; EPILOG(z);}
+static DF2(jtfolk2){F2PREFIP;DECLFGH;PROLOG(0029);A z; FOLK2;
+ EPILOG(z);}
 
 // see if f is defined as [:, as a single name
 static B jtcap(J jt,A x){V*v;L *l;
- if(v=VAV(x),CTILDE==v->id&&NAME&AT(v->fgh[0])&&(l=syrd(v->fgh[0]))&&(x=l->val))v=VAV(x);  // don't go through chain of names, since it might loop (on u) and it's ugly to chase the chain
+ if(v=VAV(x),CTILDE==v->id&&NAME&AT(v->fgh[0])&&(l=syrd(v->fgh[0],jt->locsyms))&&(x=l->val))v=VAV(x);  // don't go through chain of names, since it might loop (on u) and it's ugly to chase the chain
  R CCAP==v->id;
 }
 
@@ -81,10 +86,12 @@ A z;RZ(z=(g2)(jtinplace,fs,hx,gs));
 EPILOG(z);}
 
 static DF2(jtfolkcomp){F2PREFIP;DECLFGH;PROLOG(0034);A z;AF f;
- RZ(a&&w);
+ ARGCHK2(a,w);
  f=atcompf(a,w,self);
+ I postflags=(I)f&3;  // extract postprocessing from return
+ f=(AF)((I)f&-4);    // restore function address
  if(f){
-  I postflags=jt->workareas.compsc.postflags;
+// obsolete   I postflags=jt->workareas.compsc.postflags;
   z=f(jt,a,w,self);
   if(z){if(postflags&2){z=num((IAV(z)[0]!=AN(AR(a)>=AR(w)?a:w))^(postflags&1));}}
  }else if(cap(fs))CAP2 else FOLK2;
@@ -92,11 +99,13 @@ static DF2(jtfolkcomp){F2PREFIP;DECLFGH;PROLOG(0034);A z;AF f;
 }
 
 static DF2(jtfolkcomp0){F2PREFIP;DECLFGH;PROLOG(0035);A z;AF f;
- RZ(a&&w);
+ ARGCHK2(a,w);
  PUSHCCT(1.0)
  f=atcompf(a,w,self);
+ I postflags=(I)f&3;  // extract postprocessing from return
+ f=(AF)((I)f&-4);    // restore function address
  if(f){
-  I postflags=jt->workareas.compsc.postflags;
+// obsolete   I postflags=jt->workareas.compsc.postflags;
   z=f(jt,a,w,self);
   if(z){if(postflags&2){z=num((IAV(z)[0]!=AN(AR(a)>=AR(w)?a:w))^(postflags&1));}}
  }else if(cap(fs))CAP2 else FOLK2;
@@ -196,10 +205,8 @@ A jtfolk(J jt,A f,A g,A h){A p,q,x,y;AF f1=jtfolk1,f2=jtfolk2;B b;C c,fi,gi,hi;I
   }
  }
 
-
-
  // If this fork is not a special form, set the flags to indicate whether the f verb does not use an
- // argument.  In that case h can inplace the unused aegument.
+ // argument.  In that case h can inplace the unused argument.
  if(f1==jtfolk1 && f2==jtfolk2) flag |= atoplr(f);
  R fdef(flag2,CFORK,VERB, f1,f2, f,g,h, flag, RMAX,RMAX,RMAX);
 }
@@ -220,7 +227,8 @@ RZ(z=(f2)(jtinplace,w,gx,fs)); \
 } \
 , 0111)
 
-CS2IP(static,static,jthook2, \
+// hook2cell is external
+CS2IP(,static,jthook2, \
 {PUSHZOMB; A protw = (A)(intptr_t)((I)w+((I)jtinplace&JTINPLACEW)); A prota = (A)(intptr_t)((I)a+((I)jtinplace&JTINPLACEA)); \
 A gx; RZ(gx=(g1)((J)(intptr_t)((I)jt + ((((I)jtinplace&((a!=w)<<JTINPLACEWX)) + ((FAV(fs)->flag2>>(VF2WILLOPEN2WX-VF2WILLOPEN1X)) & JTWILLBEOPENED+JTCOUNTITEMS)) & REPSGN(SGNIF(FAV(gs)->flag,VJTFLGOK1X)))),w,gs));  /* inplace g unless a=w.  jtinplace is always set */ \
 /* inplace gx unless it is protected */ \
@@ -231,7 +239,7 @@ RZ(z=(f2)(jtinplace,a,gx,fs)); \
 , 0112)
 
 static DF1(jthkiota){DECLFG;A a,e;I n;P*p;
- RZ(w);
+ ARGCHK1(w);
  SETIC(w,n);\
  if(SB01&AT(w)&&1==AR(w)){
   p=PAV(w); a=SPA(p,a); e=SPA(p,e); 
@@ -241,7 +249,7 @@ static DF1(jthkiota){DECLFG;A a,e;I n;P*p;
 }    /* special code for (# i.@#) */
 
 static DF1(jthkodom){DECLFG;B b=0;I n,*v;
- RZ(w);
+ ARGCHK1(w);
  if(INT&AT(w)&&1==AR(w)){n=AN(w); v=AV(w); DO(n, if(b=0>v[i])break;); if(!b)R odom(2L,n,v);}
  R CALL2(f2,w,CALL1(g1,w,gs),fs);
 }    /* special code for (#: i.@(* /)) */
@@ -255,7 +263,7 @@ static DF1(jthkodom){DECLFG;B b=0;I n,*v;
   z=((opt0 comp opt1) || (opt0==opt1&&optx0>=optx1))?2*optx0+1:2*optx1; opt0=opt0  compe opt1?opt0:opt1; z+=n&1; if(n&1&&wv[0] comp opt0)z=0; break;}
 
 static DF1(jthkindexofmaxmin){I z=0;
- RZ(w&&self);
+ ARGCHK2(w,self);
  I n=AN(w);
  if(!(1==AR(w)&&AT(w)&INT+FL))R hook1(w,self);
  if(n>1){
@@ -280,23 +288,30 @@ static DF2(jthklvl2){
  RETF(num(((VAV(self)->flag>>VFHKLVLGTX)&1)^levelle(w,comparand-(VAV(self)->flag&VFHKLVLDEC))));  // decrement for < or >:; complement for > >:
 }
 
-F2(jthook){AF f1=0,f2=0;C c,d,e,id;I flag=VFLAGNONE;V*u,*v;
- RZ(a&&w);
+F2(jthook){AF f1=0,f2=0;C c,d,e,id;I flag=VFLAGNONE,linktype=0;V*u,*v;
+ ARGCHK2(a,w);
  switch(BD(AT(a),AT(w))){
   default:            ASSERT(0,EVSYNTAX);
   case BD(VERB,VERB):
    // This is the (V V) case, producing a verb
    u=FAV(a); c=u->id; f1=jthook1cell; f2=jthook2cell;
    v=FAV(w); d=v->id; e=ID(v->fgh[0]);
-   // Set flag to use: ASGSAFE if both operands are safe, and INPLACEOK to match f1,f2
+   // Set flag to use: ASGSAFE if both operands are safe; and FLGOK init to OK as for hook, but change as needed to match f1,f2
    flag=((u->flag&v->flag)&VASGSAFE)+(VJTFLGOK1|VJTFLGOK2);  // start with in-place enabled, as befits hook1/hook2
-   if(d==CCOMMA)switch(c){   // all of this except for $, could be handled by virtual blocks
+   if(d==CCOMMA)switch(c){   // all of this except for ($,) is handled by virtual blocks
     case CDOLLAR: f2=jtreshape; flag+=VIRS2; break;  // ($,) is inplace
+   }else if(d==CBOX){
+    if(c==CRAZE){f2=jtlink; linktype=ACINPLACE;  // (;<)
+    }else if(c==CCOMMA){f2=jtlink; linktype=ACINPLACE+1;  // (,<)
+    }
    }else if(d==CLDOT){   // (compare L.)
     I comptype=0; comptype=c==CLT?VFHKLVLGT:comptype; comptype=c==CGT?VFHKLVLDEC:comptype; comptype=c==CLE?VFHKLVLDEC+VFHKLVLGT:comptype; comptype=c==CGE?4:comptype;
     if(comptype){flag|=comptype; f2=jthklvl2; flag &=~VJTFLGOK2;}
    }else        switch(c){
-    case CSLDOT:  if(COMPOSE(d)&&e==CIOTA&&CPOUND==ID(v->fgh[1])&&CBOX==ID(u->fgh[0])){f1=jtkeybox; flag &=~VJTFLGOK1;} break; // (</. i.@#)
+    case CSLDOT:  if(COMPOSE(d)&&e==CIOTA&&CPOUND==ID(v->fgh[1])){  // (f/. i.@#)  or @:
+                   if(CBOX==ID(u->fgh[0])){f1=jtkeybox; flag &=~VJTFLGOK1;} // (</. i.@#)
+                   else if(u->valencefns[1]==jtkeyheadtally){f1=jtkeyheadtally; flag &=~VJTFLGOK1;} // ((#,{.)/. i.@#) or  (({.,#)/. i.@#)
+                  } break;
     case CPOUND:  if(COMPOSE(d)&&e==CIOTA&&CPOUND==ID(v->fgh[1])){f1=jthkiota; flag &=~VJTFLGOK1;} break;  // (# i.@#))
     case CABASE:  if(COMPOSE(d)&&e==CIOTA&&CSLASH==ID(v->fgh[1])&&CSTAR==ID(FAV(v->fgh[1])->fgh[0])){f1=jthkodom; flag &=~VJTFLGOK1;} break;  // (#: i.@(*/))
     case CIOTA:   
@@ -304,7 +319,8 @@ F2(jthook){AF f1=0,f2=0;C c,d,e,id;I flag=VFLAGNONE;V*u,*v;
     case CFROM:   if(d==CGRADE){f2=jtordstati; flag &=~VJTFLGOK2;} else if(d==CTILDE&&e==CGRADE){f2=jtordstat; flag &=~VJTFLGOK2;}
    }
    // Return the derived verb
-   R fdef(0,CHOOK, VERB, f1,f2, a,w,0L, flag, RMAX,RMAX,RMAX);
+   A z;RZ(z=fdef(0,CHOOK, VERB, f1,f2, a,w,0L, flag, RMAX,RMAX,RMAX));
+   FAV(z)->localuse.lclr[0]=linktype; R z;  // if it's a form of ;, install the form
   // All other cases produce an adverb
   case BD(ADV, ADV ): f1=taa; break;
   case BD(NOUN,CONJ):

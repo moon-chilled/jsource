@@ -32,8 +32,9 @@ DC jtdeba(J jt,C t,void *x,void *y,A fs){DC d;
   case DCCALL:   
    d->dcx=x; d->dcy=y; d->dcf=fs; 
    d->dca=jt->curname; d->dcm=NAV(d->dca)->m;
-   d->dcn=(I)jt->cursymb;
+// obsolete   d->dcn=(I)jt->cursymb;
    d->dcstop=-2;
+   // dcn fill in in caller
    if(jt->dbss==SSSTEPINTO){d->dcss=SSSTEPINTO; jt->dbssd=d; jt->dbss=0;}
  }
  R d;
@@ -95,7 +96,7 @@ static B jterrcap(J jt){A y,*yv;
 }    /* error capture */
 
 // suspension.  Loop on keyboard input.  Keep executing sentences until something changes dbsusact.
-static void jtsusp(J jt){B t;DC d;
+static void jtsusp(J jt){DC d;
  // normally we run with an empty stack frame which is always ready to hold the display of the next sentence
  // to execute; the values are filled in when there is an error.  We are about to call immex to run sentences,
  // and it will create a stack frame for its result.  CREATION of this stack frame will overwrite the current top-of-stack
@@ -104,20 +105,22 @@ static void jtsusp(J jt){B t;DC d;
  if(!deba(DCJUNK,0,0,0))R; // create spacer frame
  jt->dbsusact=SUSCONT;
  A *old=jt->tnextpushp;  // fence must be after we have allocated out stack block
- d=jt->dcs; t=jt->tostdout;
- jt->dcs=0; jt->tostdout=1;
+ d=jt->dcs;
+// obsolete t=jt->tostdout;
+ jt->dcs=0;
+// obsolete  jt->tostdout=1;
 #if USECSTACK
  jt->cstackmin=MAX(jt->cstackinit-(CSTACKSIZE-CSTACKRESERVE),jt->cstackmin-CSTACKSIZE/10);
 #else
  jt->fdepn =MIN(NFDEP ,jt->fdepn +NFDEP /10);
 #endif
  jt->fcalln=MIN(NFCALL,jt->fcalln+NFCALL/10);
- if     (jt->dbssexec){RESETERR; immex(jt->dbssexec); tpop(old);}
- else if(jt->dbtrap  ){RESETERR; immex(jt->dbtrap  ); tpop(old);}
+ if     (jt->dbssexec){RESETERR; immex(jt->dbssexec); tpop(old);}  // force typeout
+ else if(jt->dbtrap  ){RESETERR; immex(jt->dbtrap  ); tpop(old);}  // force typeout
  while(jt->dbsusact==SUSCONT){A  inp;
   jt->jerr=0;
-  if(jt->iepdo&&jt->iep){jt->iepdo=0; immex(jt->iep); tpop(old);}
-  if((inp=jgets("      "))==0)jt->dbsusact==SUSCLEAR;else immex(inp); // read and execute a line, but exit debug if error reading line
+  if(jt->iepdo&&jt->iep){jt->iepdo=0; immex(jt->iep); tpop(old);}  // force typeout
+  if((inp=jgets("      "))==0)jt->dbsusact==SUSCLEAR;else immex(inp); // force prompt and typeout read and execute a line, but exit debug if error reading line
   tpop(old);
  }
  if(jt->dbuser){
@@ -136,17 +139,20 @@ static void jtsusp(J jt){B t;DC d;
   jt->fcalln =NFCALL;
  }
  debz(); 
- jt->dcs=d; jt->tostdout=t;
+ jt->dcs=d;
+// obsolete  jt->tostdout=t;
 }    /* user keyboard loop while suspended */
 
 // Go into debug mode.  Run sentences in suspension until we come out of suspension
 // Result is the value that will be used for the failing sentence.  This should not be 0 unless there is an error, because
 // jtxdefn requires nonzero z during normal operation
 static A jtdebug(J jt){A z=0;C e;DC c,d;
- if(jt->dbssd){jt->dbssd->dcss=0; jt->dbssd=0;}
+ if(jt->dbssd){jt->dbssd->dcss=0; jt->dbssd=0;}  // clear previous single-step state - should do at end instead
+// create debug state frame scaf
  RZ(d=suspset(jt->sitop));
  if(d->dcix<0)R 0;  // if the verb has exited, all we can do is return
  e=jt->jerr; jt->jerr=0;
+// pass in & rcv debug state frame
  susp();
  switch(jt->dbsusact){
   case SUSRUN:      
@@ -158,12 +164,13 @@ static A jtdebug(J jt){A z=0;C e;DC c,d;
   case SUSCLEAR:
    jt->jerr=e;    
    c=jt->sitop; 
-   while(c){if(DCCALL==c->dctype)DGOTO(c,-1) c=c->dclnk;} 
+   while(c){if(DCCALL==c->dctype)DGOTO(c,-1) c=c->dclnk;} break;
  }
  if(jt->dbsusact!=SUSCLEAR)jt->dbsusact=SUSCONT;
  d->dcsusp=0;
  // If there is an error, set z=0; if not, make sure z is nonzero (use i. 0 0)
   if(jt->jerr)z=0; // return z=0 to cause us to look for resumption address
+// return debug state frame scaf
  R z;
 }
 
@@ -188,30 +195,31 @@ A jtpee(J jt,A *queue,CW*ci,I err,I lk,DC c){A z=0;
 A jtparsex(J jt,A* queue,I m,CW*ci,DC c){A z;B s;
  movesentencetosi(jt,queue,m,0);  // install sentence-to-be-executed for stop purposes
  if(s=dbstop(c,ci->source)){z=0; jsignal(EVSTOP);}
- else                      {z=parsea(queue,m);     }
+ else                      {z=PARSERVALUE(parsea(queue,m));     }
  // If we hit a stop, or if we hit an error outside of try./catch., enter debug mode.  But if debug mode is off now, we must have just
  // executed 13!:0]0, and we should continue on outside of debug mode.  Error processing filled the current si line with the info from the parse
  if(!z&&jt->uflags.us.cx.cx_c.db){DC t=jt->sitop->dclnk; t->dcj=jt->sitop->dcj=jt->jerr; z=debug(); t->dcj=0;} //  d is PARSE type; set d->dcj=err#; d->dcn must remain # tokens
  R z;
 }
 
-DF2(jtdbunquote){A t,z;B b=0,s;DC d;V*sv;
+A jtdbunquote(J jt,A a,A w,A self,L *stabent){A t,z;B b=0,s;DC d;V*sv;
  sv=FAV(self); t=sv->fgh[0]; 
- RZ(d=deba(DCCALL,a,w,self));
+ RZ(d=deba(DCCALL,a,w,self)); d->dcn=(I)stabent;
  if(CCOLON==sv->id&&(sv->flag&VXOP||t&&NOUN&AT(t))){  // : and executable body: either OP (adv/conj now with noun operands) or m : n
   ras(self); z=a?dfs2(a,w,self):dfs1(w,self); fa(self);
  }else{                              /* tacit    */
   d->dcix=0;  // set a pseudo-line-number for display purposes for the tacit 
   do{
    d->dcnewlineno=0;  // turn off 'reexec requested' flag
-   if(s=dbstop(d,0L)){z=0; jsignal(EVSTOP);}
+   if(s=dbstop(d,0L)){z=0; jsignal(EVSTOP);}  // if this line is a stop
    else              {ras(self); z=a?dfs2(a,w,self):dfs1(w,self); fa(self);}
    // If we hit a stop, or if we hit an error outside of try./catch., enter debug mode.  But if debug mode is off now, we must have just
    // executed 13!:8]0, and we should continue on outside of debug mode
    if(!z&&jt->uflags.us.cx.cx_c.db){d->dcj=jt->jerr; movecurrtoktosi(jt); z=debug(); if(self!=jt->sitop->dcf)self=jt->sitop->dcf;}
+// look at debug frame for looping scaf
    if(b){fa(a); fa(w);}
    if(b=jt->dbalpha||jt->dbomega){a=jt->dbalpha; w=jt->dbomega; jt->dbalpha=jt->dbomega=0;}
-  }while(d->dcnewlineno&&d->dcix!=-1);  // if suspension tries to reexecute a line other than -1 (which means 'exit'), reexecute
+  }while(d->dcnewlineno&&d->dcix!=-1);  // if suspension tries to reexecute a line other than -1 (which means 'exit'), reexecute the tacit definition
  }
  if(d->dcss)ssnext(d,d->dcss);
  if(jt->dbss==SSSTEPINTOs)jt->dbss=0;
@@ -221,7 +229,7 @@ DF2(jtdbunquote){A t,z;B b=0,s;DC d;V*sv;
 
 
 F1(jtdbc){UC k;
- RZ(w);
+ ARGCHK1(w);
  if(AN(w)){
   RE(k=(UC)i0(w));
   ASSERT(!(k&~1),EVDOMAIN);
@@ -250,7 +258,7 @@ F1(jtdbrun ){ASSERTMTV(w); jt->dbsusact=SUSRUN;  R mtm;}
 F1(jtdbnext){ASSERTMTV(w); jt->dbsusact=SUSNEXT; R mtm;}
      /* 13!:5  run next */
 
-F1(jtdbret ){RZ(w); jt->dbsusact=SUSRET; ras(w); jt->dbresult=w; R mtm;}
+F1(jtdbret ){ARGCHK1(w); jt->dbsusact=SUSRET; ras(w); jt->dbresult=w; R mtm;}
      /* 13!:6  exit with result */
 
 F1(jtdbjump){RE(jt->dbjump=i0(w)); jt->dbsusact=SUSJUMP; R mtm;}

@@ -14,13 +14,12 @@
 /* A     slist     script files used in right argument to 0!:              */
 /* I     slisti    index in slist for current script                       */
 /* I     slistn    slist # real entries; AN(slist) is reserved entries     */
-/* B     tostdout  1 iff output to standard output                         */
 
 #include "j.h"
 #include "p.h"
 
 
-A jteval(J jt,C*s){R parse(tokens(cstr(s),1+(AN(jt->locsyms)>1)));}
+A jteval(J jt,C*s){R PARSERVALUE(parse(tokens(cstr(s),1+(AN(jt->locsyms)>1))));}
 
 A jtev1(J jt,    A w,C*s){A z; R df1(z,  w,eval(s));}  // parse *s and apply to w
 A jtev2(J jt,A a,A w,C*s){A z; R df2(z,a,w,eval(s));}  // parse *s and apply to a and w
@@ -29,34 +28,40 @@ A jtevc(J jt,A a,A w,C*s){A z; R df2(z,a,w,colon(num(2),cstr(s)));}
 
 // ". y
 F1(jtexec1){A z;
- RZ(w);
- if(AT(w)&NAME){z=nameref(w);  // the case ".@'name' which is the fastest way to refer to a deferred name
+ ARGCHK1(w);
+ if(AT(w)&NAME){z=nameref(w,jt->locsyms);  // the case ".@'name' which is the fastest way to refer to a deferred name
  }else{
   F1RANK(1,jtexec1,DUMMYSELF);
   A savself = jt->sf;  // in case we are in a recursion, preserve the restart point
-  STACKCHKOFL FDEPINC(1); z=parse(tokens(vs(w),1+(AN(jt->locsyms)>1))); jt->asgn=0; FDEPDEC(1);
-  jt->sf=savself;
+  STACKCHKOFL FDEPINC(1); z=PARSERVALUE(parse(ddtokens(vs(w),4+1+(AN(jt->locsyms)>1)))); FDEPDEC(1);  // replace DDs, but require that they be complete within the string (no jgets)
+// obsolete  jt->asgn=0; 
+ jt->sf=savself;
  }
  RETF(z&&!(AT(z)&NOUN)?mtv:z);  // if non-noun result, return empty $0
 }
 
-// execute w, which is either a string or the boxed words of a string (as if from wordil())
-F1(jtimmex){A z;
+// execute w, which is either a string or the boxed words of a string (as if from tokens())
+// JT flags controlling print are passed through to jpr
+// Result has assignment flag
+F1(jtimmex){F1PREFJT;A z;
  if(!w)R A0;  // if no string, return error
  // When we start a sentence, we need to establish AKGST in locsyms as a shadow of jt->global, because that's
  // the normal condition and u./v. will rely on it.  This is not needed for a recursive call, but it doesn't hurt either,
  // because if AKGST has been set it will already hold jt->global.  Of course, any event code must restore everything
  // to its previous state, including locales
  AKGST(jt->locsyms)=jt->global; // in case the sentence has operators, set a locale for it
- STACKCHKOFL FDEPINC(1); z=parse(tokens(w,1+(AN(jt->locsyms)>1))); FDEPDEC(1);
- if(z&&!jt->asgn)jpr(z);
+ STACKCHKOFL FDEPINC(1); z=parse(AT(w)&BOX?w:tokens(w,1+(AN(jt->locsyms)>1))); FDEPDEC(1);
+// obsolete if(z&&!jt->asgn)jtjpr(jtinplace,z);
+ if((I)z&REPSGN(SGNIFNOT(z,PARSERASGNX)))jtjpr(jtinplace,z);   // z not 0 && LSB of z is 0
  RETF(z);
 }
 
 // execute for assert: check result for all 1
-F1(jtimmea){A t,z,z1;
- z=immex(w); 
- ASSERT(jt->asgn||!z||!(AT(z)&NOUN)||(t=eq(num(1),z),
+// jt has typeout flags, pass through to immex
+// Result has assignment flag
+F1(jtimmea){F1PREFJT;A t,z,z1;
+ RZ(w=ddtokens(w,4+1+(AN(jt->locsyms)>1))); z=jtimmex(jtinplace,w);   // check for DD, but don't allow continuation read
+ ASSERT(PARSERASGN(z)||!z||!(AT(z)&NOUN)||(t=eq(num(1),z),
      all1(AT(z)&SPARSE?df1(z1,t,atop(slash(ds(CSTARDOT)),ds(CCOMMA))):t)),EVASSERT);  // apply *./@, if sparse
  RETF(z);
 }
@@ -66,7 +71,7 @@ static A jtcex(J jt,A w,AF f,A self){A z; RE(w); z=f(jt,w,self); RESETERR; R z;}
 
 // convert the gerund (i.e  AR) in w into a verb
 F1(jtexg){A*v,*wv,x,y,z;I n;
- RZ(w);
+ ARGCHK1(w);
  n=AN(w); wv=AAV(w); 
  ASSERT(n!=0,EVLENGTH);
  ASSERT(1>=AR(w),EVRANK);
@@ -74,14 +79,14 @@ F1(jtexg){A*v,*wv,x,y,z;I n;
  ASSERT(BOX&AT(w),EVDOMAIN);
  GATV0(z,BOX,n,1); v=AAV(z);
  DO(n, x=wv[i]; RZ(*v++=(y=cex(x,jtfx,0L))?y:exg(x)););  // if the AR can be converted to an A, do so; otherwise it should be a list of ARs, recur on each
- R parse(z);
+ R PARSERVALUE(parse(z));
 }
 
 L* jtjset(J jt,C*name,A x){R symbisdel(nfs((I)strlen(name),name),x,jt->global);}
 
 F2(jtapplystr){PROLOG(0054);A fs,z;
  F2RANK(1,RMAX,jtapplystr,DUMMYSELF);
- RZ(fs=parse(tokens(vs(a),1+(AN(jt->locsyms)>1))));
+ RZ(fs=PARSERVALUE(parse(tokens(vs(a),1+(AN(jt->locsyms)>1)))));
  ASSERT(VERB&AT(fs),EVSYNTAX);
  STACKCHKOFL FDEPINC(d=fdep(fs)); z=CALL1(FAV(fs)->valencefns[0],w,fs); FDEPDEC(d);
  EPILOG(z); 

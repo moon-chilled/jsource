@@ -78,14 +78,14 @@ A jtnfs(J jt,I n,C*s){A z;C f,*t;I m,p;NM*zv;
 
 // string from name: returns string for the name
 // if b&SFNSIMPLEONLY, return only the simple name
-A jtsfn(J jt,B b,A w){NM*v; RZ(w); v=NAV(w); R str(b&SFNSIMPLEONLY?v->m:AN(w),v->s);}
+A jtsfn(J jt,B b,A w){NM*v; ARGCHK1(w); v=NAV(w); R str(b&SFNSIMPLEONLY?v->m:AN(w),v->s);}
 
 // string from name evocation: returns string for name UNLESS the name was an NMDOT type; in that case it returns w f. which will be a verb
-A jtsfne(J jt,A w){RZ(w); A wn=FAV(w)->fgh[0]; if(AT(wn)&NAMEBYVALUE)R fix(w,zeroionei(0)); R sfn(0,wn);}
+A jtsfne(J jt,A w){ARGCHK1(w); A wn=FAV(w)->fgh[0]; if(AT(wn)&NAMEBYVALUE)R fix(w,zeroionei(0)); R sfn(0,wn);}
 
 
 F1(jtnfb){A y;C*s;I n;
- RZ(w);
+ ARGCHK1(w);
  ASSERT(BOX&AT(w),EVDOMAIN);
  ASSERT(!AR(w),EVRANK);
  RZ(y=vs(ope(w)));
@@ -110,13 +110,13 @@ F1(jtonm){A x,y; RZ(x=ope(w)); y=stdnm(x); ASSERTN(y,EVILNAME,nfs(AN(x),CAV(x)))
 
 // w is array of boxed strings; result is name class for each
 F1(jtnc){A*wv,x,y,z;I i,n,t,*zv;L*v; 
- RZ(w);
+ ARGCHK1(w);
  n=AN(w); wv=AAV(w);   // n=#names  wv->first box
  ASSERT(!n||BOX&AT(w),EVDOMAIN);   // verify boxed input (unless empty)
  GATV(z,INT,n,AR(w),AS(w)); zv=AV(z);   // Allocate z=result, same shape as input; zv->first result
  for(i=0;i<n;++i){   // for each name...
   RE(y=stdnm(wv[i]));  // point to name, audit for validity
-  if(y){if(v=syrd(y)){x=v->val; t=AT(x);}else{x=0; if(jt->jerr){y=0; RESETERR;}}}  // If valid, see if the name is defined
+  if(y){if(v=syrd(y,jt->locsyms)){x=v->val; t=AT(x);}else{x=0; if(jt->jerr){y=0; RESETERR;}}}  // If valid, see if the name is defined
   // syrd can fail if a numbered locative is retrograde.  Call that an invalid name, rather than an error, here; thus the RESETERR
   // kludge: if the locale is not defined, syrd will create it.  Better to use a version/parameter to syrd to control that?
   //   If that were done, we could dispense with the error check here (but invalid locale would be treated as undefined rather than invalid).
@@ -128,56 +128,63 @@ F1(jtnc){A*wv,x,y,z;I i,n,t,*zv;L*v;
  RETF(z);
 }    /* 4!:0  name class */
 
-
-static SYMWALK(jtnlxxx, A,BOX,20,1, jt->workareas.namelist.nla[*((UC*)NAV(d->name)->s)]&&jt->workareas.namelist.nlt&AT(d->val), 
+// these functions are called with an a arg that is a 256-char rank-1 boolean map giving the initial characters wanted, and AS(a)[0] is a mask of allowed types
+// obsolete static SYMWALK(jtnlxxx, A,BOX,20,1, jt->workareas.namelist.nla[*((UC*)NAV(d->name)->s)]&&jt->workareas.namelist.nlt&AT(d->val), 
+// obsolete     RZ(*zv++=incorp(sfn(SFNSIMPLEONLY,d->name))) )
+// obsolete        SYMWALK(jtnlsym, A,BOX,20,1, jt->workareas.namelist.nla[*((UC*)NAV(d->name)->s)],
+// obsolete     RZ(*zv++=incorp(sfn(SFNSIMPLEONLY,d->name))) )
+static SYMWALK(jtnlxxx, A,BOX,20,1, CAV1(a)[((UC*)NAV(d->name)->s)[0]]&&AS(a)[0]&AT(d->val), 
     RZ(*zv++=incorp(sfn(SFNSIMPLEONLY,d->name))) )
 
-       SYMWALK(jtnlsym, A,BOX,20,1, jt->workareas.namelist.nla[*((UC*)NAV(d->name)->s)],
+       SYMWALK(jtnlsym, A,BOX,20,1, CAV1(a)[((UC*)NAV(d->name)->s)[0]],
     RZ(*zv++=incorp(sfn(SFNSIMPLEONLY,d->name))) )
 
 static const I nlmask[] = {NOUN,ADV,CONJ,VERB, MARK,MARK,SYMB,MARK};
 
-static F1(jtnlx){A z=mtv;B b;I m=0,*v,x;
+// a is the rank-1 256-byte initial-letter mask
+static F2(jtnlx){A z=mtv;B b;I m=0,*v,x;
  RZ(w=vi(w)); v=AV(w); 
  DQ(AN(w), x=*v++; m|=nlmask[BETWEENC(x,0,6)?x:7];); 
- jt->workareas.namelist.nlt=m&RHS; b=1&&jt->workareas.namelist.nlt&RHS;
+// obsolete  jt->workareas.namelist.nlt=m&RHS; b=1&&jt->workareas.namelist.nlt&RHS;
+ AS(a)[0]=m&RHS; b=1&&AS(a)[0]&RHS;  // AS(a)[0] is used for the type mask
  ASSERT(!(m&MARK),EVDOMAIN);
- if(b           )RZ(z=nlxxx(jt->global));
- if(b&&(AN(jt->locsyms)>1))RZ(z=over(nlxxx(jt->locsyms),z));
- if(m==SYMB     )RZ(z=over(nlsym(jt->stloc),z));
+ if(b           )RZ(z=nlxxx(a,jt->global));
+ if(b&&(AN(jt->locsyms)>1))RZ(z=over(nlxxx(a,jt->locsyms),z));
+ if(m==SYMB     )RZ(z=over(nlsym(a,jt->stloc),z));
  R nub(grade2(z,ope(z)));
 }
 
-F1(jtnl1){memset(jt->workareas.namelist.nla,C1,256L); R nlx(w);}
+F1(jtnl1){A a; GAT0(a,B01,256,1) memset(CAV1(a),C1,256L); R nlx(a,w);}
      /* 4!:1  name list */
 
 F2(jtnl2){UC*u;
- RZ(a&&w);
+ ARGCHK2(a,w);
  ASSERT(LIT&AT(a),EVDOMAIN);
- memset(jt->workareas.namelist.nla,C0,256L); 
- u=UAV(a); DQ(AN(a),jt->workareas.namelist.nla[*u++]=1;);
- R nlx(w);
+// obsolete  memset(jt->workareas.namelist.nla,C0,256L); 
+ A tmp; GAT0(tmp,B01,256,1) memset(CAV1(tmp),C0,256L);
+ u=UAV(a); DQ(AN(a),CAV1(a=tmp)[*u++]=1;);
+ R nlx(tmp,w);
 }    /* 4!:1  name list */
 
 
 F1(jtscind){A*wv,x,y,z;I n,*zv;L*v;
- RZ(w);
+ ARGCHK1(w);
  n=AN(w); 
  ASSERT(!n||BOX&AT(w),EVDOMAIN);
  wv=AAV(w); 
  GATV(z,INT,n,AR(w),AS(w)); zv=AV(z);
- DO(n, x=wv[i]; RE(y=stdnm(x)); ASSERTN(y,EVILNAME,nfs(AN(x),CAV(x))); v=syrd(y); RESETERR; zv[i]=v?v->sn:-1;);
+ DO(n, x=wv[i]; RE(y=stdnm(x)); ASSERTN(y,EVILNAME,nfs(AN(x),CAV(x))); v=syrd(y,jt->locsyms); RESETERR; zv[i]=v?v->sn:-1;);
  RETF(z);
 }    /* 4!:4  script index */
 
 
 static A jtnch1(J jt,B b,A w,I*pm,A ch){A*v,x,y;C*s,*yv;LX *e;I i,k,m,p,wn;L*d;
- RZ(w);
+ ARGCHK1(w);
  wn=AN(w); e=LXAV0(w);                                /* locale                */
- x=(A)(*e+jt->sympv)->name; p=AN(x); s=NAV(x)->s;  /* locale name/number           */
+ x=(A)(*e+LAV0(jt->symp))->name; p=AN(x); s=NAV(x)->s;  /* locale name/number           */
  m=*pm; v=AAV(ch)+m;                               /* result to appended to */
  for(i=SYMLINFOSIZE;i<wn;++i,++e)if(*e){
-  d=*e+jt->sympv;
+  d=*e+LAV0(jt->symp);
   while(1){
    if(LCH&d->flag&&d->name&&d->val){
     d->flag^=LCH;
@@ -189,7 +196,7 @@ static A jtnch1(J jt,B b,A w,I*pm,A ch){A*v,x,y;C*s,*yv;LX *e;I i,k,m,p,wn;L*d;
      *v++=incorp(y); ++m;
    }}
    if(!d->next)break;
-   d=d->next+jt->sympv;
+   d=d->next+LAV0(jt->symp);
  }}
  *pm=m;
  R ch;
@@ -202,11 +209,11 @@ F1(jtnch){A ch;B b;LX *e;I i,m,n;L*d;
   n=AN(jt->stloc); e=SYMLINFOSIZE+LXAV0(jt->stloc);
   // named locales first
   for(i=1;i<n;++i,++e)if(*e){
-   d=*e+jt->sympv;
+   d=*e+LAV0(jt->symp);
    while(1){
     RZ(ch=nch1(b,d->val,&m,ch));
     if(!d->next)break;
-    d=d->next+jt->sympv;
+    d=d->next+LAV0(jt->symp);
   }}
   // now numbered locales
   DO(jtcountnl(jt), A loc=jtindexnl(jt,i); if(loc)RZ(ch=nch1(b,loc,&m,ch)););
@@ -218,7 +225,7 @@ F1(jtnch){A ch;B b;LX *e;I i,m,n;L*d;
 
 
 F1(jtex){A*wv,y,z;B*zv;I i,n;L*v;I modifierchg=0;
- RZ(w);
+ ARGCHK1(w);
  n=AN(w); wv=AAV(w); 
  ASSERT(((n-1)|SGNIF(AT(w),BOXX))<0,EVDOMAIN);
  GATV(z,B01,n,AR(w),AS(w)); zv=BAV(z);
@@ -228,18 +235,18 @@ F1(jtex){A*wv,y,z;B*zv;I i,n;L*v;I modifierchg=0;
   // If the name is defined and is an ACV, invalidate all looked-up ACVs
   // If the value is at large in the stacks and not deferred-freed, increment the use count and deferred-free it
   // If the name is assigned in a local symbol table, we ASSUME it is at large in the stacks and incr/deferred-free it.  We sidestep the nvr stack for local nouns
-  if(y&&(v=syrd(y))){
+  if(y&&(v=syrd(y,jt->locsyms))){
    if(jt->uflags.us.cx.cx_c.db)RZ(redef(mark,v));
    A locfound=syrdforlocale(y);  // get the locale in which the name is defined
    if((locfound==jt->locsyms)|(AFLAG(v->val)&AFNVRUNFREED)){  // see if local or NVR
     if(!(AFLAG(v->val)&AFNVR)){
      // The symbol is a local symbol not on the NVR stack.  We must put it onto the NVR stack.
-     A *nvrav=jt->nvrav;
-     if((jt->parserstackframe.nvrtop+1U) > jt->nvran)RZ(nvrav=extnvr());  // Extend nvr stack if necessary.  copied from parser
-     nvrav[jt->parserstackframe.nvrtop++] = v->val;   // record the place where the value was protected; it will be freed when this sentence finishes
+     A nvra=jt->nvra;
+     if(unlikely((I)(jt->parserstackframe.nvrtop+1U) > AN(nvra)))RZ(nvra=extnvr());  // Extend nvr stack if necessary.  copied from parser
+     AAV1(nvra)[jt->parserstackframe.nvrtop++] = v->val;   // record the place where the value was protected; it will be freed when this sentence finishes
      AFLAG(v->val) |= AFNVR|AFNVRUNFREED;  // mark the value as protected
     }
-    if(AFLAG(v->val)&AFNVRUNFREED){AFLAG(v->val)&=~AFNVRUNFREED; ras(v->val);}  // indicate deferred free, and protect from the upcoming free; but if already deferred-free, reduce the usecount now
+    if(AFLAG(v->val)&AFNVRUNFREED){ras(v->val); AFLAG(v->val)&=~AFNVRUNFREED;}  // indicate deferred free, and protect from the upcoming free; but if already deferred-free, reduce the usecount now
    }
    if(!(v->name->flag&NMDOT)&&v->val&&AT(v->val)&(VERB|ADV|CONJ))modifierchg=1;  // if we delete a modifier, remember that fact
    probedel(NAV(v->name)->m,NAV(v->name)->s,NAV(v->name)->hash,locfound);  // delete the symbol (incl name and value) in the locale in which it is defined

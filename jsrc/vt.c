@@ -52,7 +52,7 @@ static F2(jttks){PROLOG(0092);A a1,q,x,y,z;B b,c;I an,m,r,*s,*u,*v;P*wp,*zp;
 // general take routine.  a is result frame followed by signed take values i. e. shape of result, w is array
 static F2(jttk){PROLOG(0093);A y,z;B b=0;C*yv,*zv;I c,d,dy,dz,e,i,k,m,n,p,q,r,*s,t,*u;
  n=AN(a); u=AV(a); r=AR(w); s=AS(w); t=AT(w);
- if(unlikely(t&SPARSE))R tks(a,w);
+ if(unlikely((t&SPARSE)!=0))R tks(a,w);
  DO(n, if(!u[i]){b=1; break;}); if(!b)DO(r-n, if(!s[n+i]){b=1; break;});  // if empty take, or take from empty cell, set b
  if(((b-1)&AN(w))==0)R tk0(b,a,w);   // this handles empty w, so PROD OK below   b||!AN(w)
  k=bpnoun(t); z=w; c=q=1;  // c will be #cells for this axis
@@ -76,8 +76,8 @@ static F2(jttk){PROLOG(0093);A y,z;B b=0;C*yv,*zv;I c,d,dy,dz,e,i,k,m,n,p,q,r,*s
 
 F2(jttake){A s;I acr,af,ar,n,*v,wcr,wf,wr;
  F2PREFIP;
- RZ(a&&w); I wt = AT(w);  // wt=type of w
- if(unlikely(SPARSE&AT(a)))RZ(a=denseit(a));
+ ARGCHK2(a,w); I wt = AT(w);  // wt=type of w
+ if(unlikely((SPARSE&AT(a))!=0))RZ(a=denseit(a));
  if(likely(!(SPARSE&wt)))RZ(w=setfv(w,w)); 
  ar=AR(a); acr=jt->ranks>>RANKTX; acr=ar<acr?ar:acr; af=ar-acr;  // ?r=rank, ?cr=cell rank, ?f=length of frame
  wr=AR(w); wcr=(RANKT)jt->ranks; wcr=wr<wcr?wr:wcr; wf=wr-wcr; RESETRANK; 
@@ -194,7 +194,7 @@ static F1(jtrsh0){A x,y;I wcr,wf,wr,*ws;
 
 F1(jthead){I wcr,wf,wr;
  F1PREFIP;
- RZ(w);
+ ARGCHK1(w);
  wr=AR(w); wcr=(RANKT)jt->ranks; wcr=wr<wcr?wr:wcr; wf=wr-wcr;  // no RESETRANK so that we can pass rank into other code
  if(!wcr||AS(w)[wf]){  // if cell is atom, or cell has items - which means it's safe to calculate the size of a cell
   if(((-wf)|((AT(w)&(DIRECT|RECURSIBLE))-1)|(wr-2))>=0){  // frame=0, and DIRECT|RECURSIBLE, and rank>1.  No gain in virtualizing an atom, and it messes up inplacing and allocation-size counting in the tests
@@ -216,9 +216,9 @@ F1(jthead){I wcr,wf,wr;
 
 F1(jttail){I wcr,wf,wr;
  F1PREFIP;
- RZ(w);
+ ARGCHK1(w);
  wr=AR(w); wcr=(RANKT)jt->ranks; wcr=wr<wcr?wr:wcr; wf=wr-wcr;  // no RESETRANK: rank is passed into from/take/rsh0.  Left rank is garbage but that's OK
- R !wcr||*(wf+AS(w))?jtfrom(jtinplace,num(-1),w) :  // scaf should generate virtual block here for speed
+ R !wcr||AS(w)[wf]?jtfrom(jtinplace,num(-1),w) :  // if cells are atoms, or if the cells are nonempty arrays, result is last cell(s) scaf should generate virtual block here for speed
      SPARSE&AT(w)?irs2(num(0),take(num(-1),w),0L,0L,wcr,jtfrom):rsh0(w);
  // pristinity from other verbs
 }

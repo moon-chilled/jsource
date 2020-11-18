@@ -265,9 +265,9 @@ fail:
 
 // Return 1 if a and w match, 0 if not
 B jtequ(J jt,A a,A w){A x;
- RZ(a&&w);F2PREFIP;  // allow inplace request - it has no effect
+ F2PREFIP;ARGCHK2(a,w);  // allow inplace request - it has no effect
  if(a==w)R 1;
- if(unlikely(SPARSE&(AT(a)|AT(w))&&AR(a)&&AR(w))){RZ(x=matchs(a,w)); R BAV(x)[0];}
+ if(unlikely((SPARSE&(AT(a)|AT(w)))!=0))if(AR(a)&&AR(w)){RZ(x=matchs(a,w)); R BAV(x)[0];}
  R ((B (*)())jtmatchsub)(jt,a,w,0   MATCHSUBDEFAULTS);  // don't check level - it takes too long for big arrays
 }
 
@@ -398,7 +398,7 @@ static B jtmatchsub(J jt,A a,A w,B* RESTRICT x,I af,I wf,I m,I n,I b1){C*av,*wv;
 }
 
 static F2(jtmatchs){A ae,ax,p,q,we,wx,x;B*b,*pv,*qv;D d;I acr,an=0,ar,c,j,k,m,n,r,*s,*v,wcr,wn=0,wr;P*ap,*wp;
- RZ(a&&w);
+ ARGCHK2(a,w);
  ar=AR(a); acr=jt->ranks>>RANKTX; acr=ar<acr?ar:acr; r=ar;
  wr=AR(w); wcr=(RANKT)jt->ranks; wcr=wr<wcr?wr:wcr; RESETRANK;
  if(ar>acr||wr>wcr)R rank2ex(a,w,DUMMYSELF,acr,wcr,acr,wcr,jtmatchs);
@@ -426,9 +426,9 @@ static F2(jtmatchs){A ae,ax,p,q,we,wx,x;B*b,*pv,*qv;D d;I acr,an=0,ar,c,j,k,m,n,
 // x -:"r y or x -.@-:"r y depending on LSB of jt
 F2(jtmatch){A z;I af,m,n,mn,wf;
  I eqis0 = (I)jt&1; jt=(J)((I)jt&~1);
- RZ(a&&w);
+ ARGCHK2(a,w);
  I isatoms = (-AN(a))&(-AN(w));  // neg if both args have atoms
- if(unlikely(SPARSE&(AT(a)|AT(w))))R ne(num(eqis0),matchs(a,w));
+ if(unlikely((SPARSE&(AT(a)|AT(w)))!=0))R ne(num(eqis0),matchs(a,w));
  af=AR(a)-(I)(jt->ranks>>RANKTX); af=af<0?0:af; wf=AR(w)-(I)((RANKT)jt->ranks); wf=wf<0?0:wf; RESETRANK;
  // exchange a and w as needed to ensure a has the shorter frame, i. e. is the repeated argument
  {A ta=a; I ti=af; I afhi=af-wf; a=afhi>=0?w:a; w=afhi>=0?ta:w; af=afhi>=0?wf:af; wf=afhi>=0?ti:wf;} 

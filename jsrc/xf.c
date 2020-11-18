@@ -135,7 +135,8 @@ F2(jtjfwrite){B b;F f;
  F2RANK(RMAX,0,jtjfwrite,DUMMYSELF);
  if(BOX&AT(w)){ASSERT(1>=AR(a),EVRANK); ASSERT(!AN(a)||AT(a)&LIT+C2T+C4T,EVDOMAIN);}
  RE(f=stdf(w));
- if(2==(I)f){b=jt->tostdout; jt->tostdout=1; jt->mtyo=MTYOFILE; jpr(a); jt->mtyo=0; jt->tostdout=b; R a;}
+// obsolete  if(2==(I)f){b=jt->tostdout; jt->tostdout=1; jt->mtyo=MTYOFILE; jpr(a); jt->mtyo=0; jt->tostdout=b; R a;}
+ if(2==(I)f){jtjpr((J)((I)jt|MTYOFILE),a); R a;}  // this forces typeout, with NOSTDOUT off
  if(4==(I)f){R (U)AN(a)!=fwrite(CAV(a),sizeof(C),AN(a),stdout)?jerrno():a;}
  if(5==(I)f){R (U)AN(a)!=fwrite(CAV(a),sizeof(C),AN(a),stderr)?jerrno():a;}
  if(b=!f)RZ(f=jope(w,FWRITE_O)) else RE(vfn(f)); 
@@ -147,7 +148,7 @@ F2(jtjfwrite){B b;F f;
 F2(jtjfappend){B b;F f;
  F2RANK(RMAX,0,jtjfappend,DUMMYSELF);
  RE(f=stdf(w));
- if(2==(I)f){B b=jt->tostdout; jt->tostdout=1; jpr(a); jt->tostdout=b; R a;}
+ if(2==(I)f){jpr(a); R a;}  // this forces typeout, with NOSTDOUT off
  ASSERT(!AN(a)||AT(a)&LIT+C2T+C4T,EVDOMAIN);
  ASSERT(1>=AR(a),EVRANK);
  if(b=!f)RZ(f=jope(w,FAPPEND_O)) else RE(vfn(f));
@@ -236,7 +237,7 @@ static B rmdir(C*v){R!rmdir1(v);}
 F1(jtjmkdir){A y,z;
  F1RANK(0,jtjmkdir,DUMMYSELF);
  ASSERT(AT(w)&BOX,EVDOMAIN);
- RZ(y=str0(vslit(AAV0(w))));
+ RZ(y=str0(vslit(AAV(w)[0])));
 #if (SYS & SYS_UNIX)
  R mkdir(CAV(y),0775)?jerrno():num(1);
 #else
@@ -248,7 +249,7 @@ F1(jtjmkdir){A y,z;
 F1(jtjferase){A y,fn;US*s;I h;
  F1RANK(0,jtjferase,DUMMYSELF);
  RE(h=fnum(w));
- if(h) {RZ(y=str0(fname(sc(h))))} else ASSERT(y=vslit(AAV0(w)),EVFNUM);
+ if(h) {RZ(y=str0(fname(sc(h))))} else ASSERT(y=vslit(AAV(w)[0]),EVFNUM);
  if(h)RZ(jclose(sc(h)));
 #if (SYS&SYS_UNIX)
  A y0=str0(y); R !unlink(CAV(y0))||!rmdir(CAV(y0))?num(1):jerrno();
@@ -276,7 +277,7 @@ F1(jtpathcwd){C path[1+NPATH];US wpath[1+NPATH];
 }
 
 F1(jtpathchdir){A z;
- RZ(w);
+ ARGCHK1(w);
  ASSERT(1>=AR(w),EVRANK);
  ASSERT(AN(w),EVLENGTH);
  ASSERT((LIT+C2T+C4T)&AT(w),EVDOMAIN);

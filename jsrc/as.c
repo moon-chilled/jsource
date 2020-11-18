@@ -169,13 +169,13 @@ SUFFIXPFX(bw1111sfxI, UI,UI, BW1111, bw1111II,R EVOK;)
 
 
 static DF1(jtsuffix){DECLF;I r;
- RZ(w);
+ ARGCHK1(w);
  r=(RANKT)jt->ranks; RESETRANK; if(r<AR(w))R rank1ex(w,self,r,jtsuffix);
  R eachl(IX(SETIC(w,r)),w,atop(fs,ds(CDROP)));
 }    /* f\."r w for general f */
 
 static DF1(jtgsuffix){A h,*hv,z,*zv;I m,n,r;
- RZ(w);
+ ARGCHK1(w);
  r=(RANKT)jt->ranks; RESETRANK; if(r<AR(w))R rank1ex(w,self,r,jtgsuffix);
  SETIC(w,n); 
  h=VAV(self)->fgh[2]; hv=AAV(h); m=AN(h);
@@ -193,7 +193,7 @@ static DF1(jtgsuffix){A h,*hv,z,*zv;I m,n,r;
  }}
 
 static DF1(jtssg){F1PREFIP;PROLOG(0020);A a,z;I i,n,r,wr;
- RZ(w);
+ ARGCHK1(w);
  ASSERT(DENSE&AT(w),EVNONCE);
  // loop over rank - we claim to handle IRS
  wr=AR(w); r=(RANKT)jt->ranks; r=wr<r?wr:r; RESETRANK; if(r<wr)R rank1ex(w,self,r,jtssg);
@@ -235,7 +235,7 @@ static DF1(jtssg){F1PREFIP;PROLOG(0020);A a,z;I i,n,r,wr;
  jtinplace = (J)(intptr_t)(((I)jt) + (JTINPLACEW+JTINPLACEA)*((FAV(fs)->flag>>(VJTFLGOK2X-JTINPLACEWX)) & JTINPLACEW));  // all items are used only once
 
 #define ZZPOPNEVER 1   // we mustn't TPOP after copying the result atoms, because they are reused.  This will leave the memory used for type-conversions unclaimed.
-   // if we implement the annulment of tpop pointers, we should use that to hand-free results that have been converted
+
  // We have to dance a bit for BOXATOP verbs, because the result comes back unboxed, but it has to be put into a box
  // to be fed into the next iteration.  This is still a saving, because we can use the same box to point to each successive result.
  // Exception: if the reusable box gets incorporated, it is no longer reusable and must be reallocated.  We will use the original z box,
@@ -252,6 +252,9 @@ static DF1(jtssg){F1PREFIP;PROLOG(0020);A a,z;I i,n,r,wr;
  AD * RESTRICT zz=0;
  for(i=0;i<n;++i){   // loop through items, noting that the first is the tail itself
   if(i){RZ(z=CALL2IP(f2,a,z,fs));}   // apply the verb to the arguments (except the first time)
+  // In case we are performing f&.>, we must set z non-PRISTINE, which it is by definition because all its boxes have escaped into the running result
+  AFLAG(z)&=~AFPRISTINE;  // we just stored z, so it's never pristine here
+
 #define ZZBODY
 #include "result.h"
   // If BOXATOP, we need to reinstate the boxing around z for the next iteration.
@@ -296,13 +299,13 @@ A jtscansp(J jt,A w,A self,AF sf){A e,ee,x,z;B*b;I f,m,j,r,t,wr;P*wp,*zp;
 }    /* f/\"r or f/\."r on sparse w */
 
 static DF1(jtsscan){A y,z;I d,f,m,n,r,t,wn,wr,*ws,wt;
- RZ(w);F1PREFIP;
+ F1PREFIP;ARGCHK1(w);
  wt=AT(w);
- if(unlikely(SPARSE&wt))R scansp(w,self,jtsscan);
+ if(unlikely((SPARSE&wt)!=0))R scansp(w,self,jtsscan);
  wn=AN(w); wr=AR(w); r=(RANKT)jt->ranks; r=wr<r?wr:r; f=wr-r; ws=AS(w); RESETRANK;
  PROD(m,f,ws); PROD1(d,r-1,f+ws+1); I *nn=&ws[f]; nn=r?nn:&I1mem; n=*nn;   // will not be used if WN==0, so PROD ok.  n is # items along the selected rank
  y=FAV(self)->fgh[0]; // y is f/
- if(((n-2)|(wn-1))<0){if(FAV(FAV(y)->fgh[0])->flag&VISATOMIC2){R r?RETARG(w):reshape(over(shape(w),num(1)),w);}else R IRS1(w,self,r,jtsuffix,z);}  // if empty arg, or just 1 cell in selected axis, convert to f/\ which handles the short arg 
+ if(((n-2)|(wn-1))<0){if(FAV(FAV(y)->fgh[0])->flag&VISATOMIC2){R r?RETARG(w):reshape(apip(shape(w),zeroionei(1)),w);}else R IRS1(w,self,r,jtsuffix,z);}  // if empty arg, or just 1 cell in selected axis, convert to f/\ which handles the short arg 
 
    // note that the above line always takes the r==0 case
  VARPS adocv; varps(adocv,self,wt,2);  // analyze f - get suffix routine
@@ -316,12 +319,12 @@ static DF1(jtsscan){A y,z;I d,f,m,n,r,t,wn,wr,*ws,wt;
 
 
 static F2(jtomask){A c,r,x,y;I m,n,p;
- RZ(a&&w);
+ ARGCHK2(a,w);
  RE(m=i0(a)); p=ABS(m); SETIC(w,n);
  r=sc(0>m?(n+p-1)/p:MAX(0,1+n-m)); c=tally(w);
  x=reshape(sc(p),  num(0));
  y=reshape(0>m?c:r,num(1) );
- R reshape(over(r,c),over(x,y));
+ R reshapeW(over(r,c),over(x,y));
 }
 
 static DF2(jtgoutfix){A h,*hv,x,z,*zv;I m,n;
@@ -380,7 +383,7 @@ static DF2(jtofxassoc){A f,i,j,p,s,x,z;C id,*zv;I c,d,k,kc,m,r,t;V*v;VA2 adocv;
 static DF1(jtiota1rev){I j; SETIC(w,j); R apv(j,j,-1L);}
 
 F1(jtbsdot){A f;AF f1=jtsuffix,f2=jtoutfix;I flag=FAV(ds(CBSDOT))->flag;C id;V*v;  // init flag is IRS1
- RZ(w);
+ ARGCHK1(w);
  if(NOUN&AT(w))R fdef(0,CBSLASH,VERB, jtgsuffix,jtgoutfix, w,0L,fxeachv(1L,w), VGERL|VAV(ds(CBSLASH))->flag, RMAX,0L,RMAX);
  v=FAV(w);  // verb info for w
  switch(v->id){

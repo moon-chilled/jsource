@@ -263,18 +263,6 @@ NB. 9!:28 and 9!:29 -----------------------------------------------------
 'rank error'   -: 9!:29 etx 0 1
 
 
-NB. 9!:32 and 9!:33 -----------------------------------------------------
-
-'domain error' -: 9!:33 etx _5
-'domain error' -: 9!:33 etx 3j4
-'domain error' -: 9!:33 etx 'a'
-'domain error' -: 9!:33 etx <4.5
-
-'limit error'  -: 9!:33 etx >IF64{1e9;1e16
-
-'rank error'   -: 9!:33 etx 3 4.5
-
-
 NB. 9!:38 and 9!:39 -----------------------------------------------------
 
 t=: 9!:38 ''
@@ -376,17 +364,6 @@ NB.
 NB. 'rank error'   -: 9!:51 etx 3 4$'abc'
 NB. 
 NB. 9!:51 old
-
-NB. 9!:54 and 9!:55 -----------------------------------------------------
-
-old=: 9!:54 ''
-9!:55 ]0
-'A' = 7 u: 65
-'A' = 8 u: 65
-9!:55 ]1
-'domain error' -: ex '''A'' = 7 u: 65'
-'domain error' -: ex '''A'' = 8 u: 65'
-9!:55 old
 
 4!:55 ;:'a a12 a6 a9 b boxq boxs c dispq disps '
 4!:55 ;:'drop1 erase evmq evms initspace namedvb nub old p ppq pps promptq '

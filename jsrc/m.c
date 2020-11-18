@@ -56,7 +56,7 @@
 #if (MEMAUDIT==0 || !_WIN32)
 #define FREECHK(x) FREE(x)
 #else
-#define FREECHK(x) if(!FREE(x))SEGFAULT  // crash on error
+#define FREECHK(x) if(!FREE(x))SEGFAULT;  // crash on error
 #endif
 
 static void jttraverse(J,A,AF);
@@ -105,9 +105,9 @@ B jtmeminit(J jt){I k,m=MLEN;
 #else
 #define AUDITFILL 
 #endif
-void jtauditmemchains(J jt){
+void jtauditmemchains(J jt){F1PREFIP;
 #if MEMAUDIT&16
-I Wi,Wj;A Wx,prevWx=0; if(jt->peekdata){for(Wi=PMINL;Wi<=PLIML;++Wi){Wj=0; Wx=(jt->mfree[-PMINL+Wi].pool); while(Wx){if(FHRHPOOLBIN(AFHRH(Wx))!=(Wi-PMINL)AUDITFILL||Wj>0x10000000)SEGFAULT prevWx=Wx; Wx=AFCHAIN(Wx); ++Wj;}}}
+I Wi,Wj;A Wx,prevWx=0; if(jt->peekdata){for(Wi=PMINL;Wi<=PLIML;++Wi){Wj=0; Wx=(jt->mfree[-PMINL+Wi].pool); while(Wx){if(FHRHPOOLBIN(AFHRH(Wx))!=(Wi-PMINL)AUDITFILL||Wj>0x10000000)SEGFAULT; prevWx=Wx; Wx=AFCHAIN(Wx); ++Wj;}}}
 #endif
 }
 
@@ -135,7 +135,7 @@ B jtspfree(J jt){I i;A p;
    US freereqd = 0;  // indicate if any fully-freed block is found
    for(p=jt->mfree[i].pool;p;p=AFCHAIN(p)){
 #if MEMAUDIT&1
-    if(FHRHPOOLBIN(AFHRH(p))!=i)SEGFAULT  // make sure chains are valid
+    if(FHRHPOOLBIN(AFHRH(p))!=i)SEGFAULT;  // make sure chains are valid
 #endif
     A base = FHRHROOTADDR(p,offsetmask);   // address of base
     US baseh = AFHRH(base);  // fetch header for base
@@ -188,30 +188,47 @@ B jtspfree(J jt){I i;A p;
  R 1;
 }    /* free unused blocks */
 
-static F1(jtspfor1){
- RZ(w);
- if(BOX&AT(w)){A*wv=AAV(w); DO(AN(w), if(wv[i])spfor1(wv[i]););}
- else if(AT(w)&TRAVERSIBLE)traverse(w,jtspfor1); 
+// return space used by w and its descendants
+static D jtspfor1(J jt, A w){D tot=0.0;
+ if(unlikely(w==0))R 0.0;
+// obsolete  if(BOX&AT(w)){A*wv=AAV(w); DO(AN(w), if(wv[i])spfor1(wv[i]););}
+// obsolete  else if(AT(w)&TRAVERSIBLE)traverse(w,jtspfor1); 
+ switch(CTTZ(AT(w))){
+  case XNUMX: case BOXX:
+   if(!(AFLAG(w)&AFNJA)){A*wv=AAV(w);
+   {DO(AN(w), if(wv[i])tot+=spfor1(wv[i]););}
+   }
+   break;
+  case VERBX: case ADVX:  case CONJX: 
+   {V*v=FAV(w); if(v->fgh[0])tot+=spfor1(v->fgh[0]); if(v->fgh[1])tot+=spfor1(v->fgh[1]); if(v->fgh[2])tot+=spfor1(v->fgh[2]);} break;
+  case XDX:
+   {DX*v=(DX*)AV(w); DQ(AN(w), if(v->x)tot+=spfor1(v->x); ++v;);} break;
+  case RATX:  
+   {A*v=AAV(w); DQ(2*AN(w), if(*v)tot+=spfor1(*v++););} break;
+  case SB01X: case SINTX: case SFLX: case SCMPXX: case SLITX: case SBOXX:
+   {P*v=PAV(w); if(SPA(v,a))tot+=spfor1(SPA(v,a)); if(SPA(v,e))tot+=spfor1(SPA(v,e)); if(SPA(v,i))tot+=spfor1(SPA(v,i)); if(SPA(v,x))tot+=spfor1(SPA(v,x));} break;
+ }
  if(!ACISPERM(AC(w))) {
   // for NJA allocations with contiguous header, the size is the header size (7+64 words) plus the data size
   // for NJA allocations with separate header, the size is the data size plus the size of the base block
   if(AFNJA&AFLAG(w)) {
-   if(AK(w)>0&&AK(w)<=AM(w))jt->spfor += SZI*WP(AT(w),AN(w),64);  // fixed rank of 64 in NJA memory
+   if(AK(w)>0&&AK(w)<=AM(w))tot += SZI*WP(AT(w),AN(w),64);  // fixed rank of 64 in NJA memory
    else{
-    jt->spfor += SZI*((1&&AT(w)&LAST0)+(((AT(w)&NAME?sizeof(NM):0)+(AN(w)<<bplg(AT(w)))+SZI-1)>>LGSZI));  // data size only
-    jt->spfor += alloroundsize(w);  // add in the header
+    tot += SZI*((1&&AT(w)&LAST0)+(((AT(w)&NAME?sizeof(NM):0)+(AN(w)<<bplg(AT(w)))+SZI-1)>>LGSZI));  // data size only
+    tot += alloroundsize(w);  // add in the header
    }
   } else {
   // for non-NJA allocations, just take the full size of the block
-   jt->spfor += alloroundsize(w);
+   tot += alloroundsize(w);
   }
  }
- R mtm;
+ R tot;
 }
 
-F1(jtspfor){A*wv,x,y,z;C*s;D*v,*zv;I i,m,n;
- RZ(w);
- n=AN(w); wv=AAV(w);  v=&jt->spfor;
+F1(jtspfor){A*wv,x,y,z;C*s;D*zv;I i,m,n;
+ ARGCHK1(w);
+ n=AN(w); wv=AAV(w);
+// obsolete   v=&jt->spfor;
  ASSERT(!n||BOX&AT(w),EVDOMAIN);
  GATV(z,FL,n,AR(w),AS(w)); zv=DAV(z); 
  for(i=0;i<n;++i){
@@ -220,14 +237,16 @@ F1(jtspfor){A*wv,x,y,z;C*s;D*v,*zv;I i,m,n;
   ASSERT(1>=AR(x),EVRANK);
   ASSERT(vnm(m,s),EVILNAME);
   RZ(y=symbrd(nfs(m,s))); 
-  *v=0.0; spfor1(y); zv[i]=*v;
+// obsolete   *v=0.0; spfor1(y); zv[i]=*v;
+  zv[i]=spfor1(y);
  }
  RETF(z);
 }    /* 7!:5 space for named object; w is <'name' */
 
-F1(jtspforloc){A*wv,x,y,z;C*s;D*v,*zv;I i,j,m,n;L*u;LX *yv,c;
- RZ(w);
- n=AN(w); wv=AAV(w);  v=&jt->spfor;
+F1(jtspforloc){A*wv,x,y,z;C*s;D tot,*zv;I i,j,m,n;L*u;LX *yv,c;
+ ARGCHK1(w);
+ n=AN(w); wv=AAV(w);
+// obsolete   v=&jt->spfor;
  ASSERT(!n||BOX&AT(w),EVDOMAIN);
  GATV(z,FL,n,AR(w),AS(w)); zv=DAV(z);   // zv-> results
  for(i=0;i<n;++i){   // loop over each name given...
@@ -245,14 +264,14 @@ F1(jtspforloc){A*wv,x,y,z;C*s;D*v,*zv;I i,j,m,n;L*u;LX *yv,c;
   }
   y=stfind(m,s,bucketx);   // y is the block for the locale
   ASSERT(y!=0,EVLOCALE);
-  *v=(D)(FHRHSIZE(AFHRH(y)));  // start with the size of the locale block (always a normal block)
-  spfor1(LOCPATH(y)); spfor1(LOCNAME(y));  // add in the size of the path and name
+  tot=(D)(FHRHSIZE(AFHRH(y)));  // start with the size of the locale block (always a normal block)
+  tot+=spfor1(LOCPATH(y)); tot+=spfor1(LOCNAME(y));  // add in the size of the path and name
   m=AN(y); yv=LXAV0(y); 
   for(j=SYMLINFOSIZE;j<m;++j){  // for each name in the locale
    c=yv[j];
-   while(c){*v+=sizeof(L); u=c+jt->sympv; spfor1(u->name); spfor1(u->val); c=u->next;}  // add in the size of the name itself and the value, and the L block for the name
+   while(c){tot+=sizeof(L); u=c+LAV0(jt->symp); tot+=spfor1(u->name); tot+=spfor1(u->val); c=u->next;}  // add in the size of the name itself and the value, and the L block for the name
   }
-  zv[i]=*v;
+  zv[i]=tot;
  }
  RETF(z);
 }    /* 7!:6 space for a locale */
@@ -304,8 +323,8 @@ void jtspendtracking(J jt){I i;
 // Make sure all deletecounts start at 0
 static void auditsimverify0(A w){
  if(!w)R;
- if(AFLAG(w)>>AFAUDITUCX)SEGFAULT   // hang if nonzero count
- if(AC(w)==0 || (AC(w)<0 && AC(w)!=ACINPLACE+ACUC1 && AC(w)!=ACINPLACE+2))SEGFAULT 
+ if(AFLAG(w)>>AFAUDITUCX)SEGFAULT;   // hang if nonzero count
+ if(AC(w)==0 || (AC(w)<0 && AC(w)!=ACINPLACE+ACUC1 && AC(w)!=ACINPLACE+2))SEGFAULT; 
  if(AFLAG(w)&AFVIRTUAL)auditsimverify0(ABACK(w));  // check backer
  if(AT(w)&(RAT|XNUM)) {A* v=AAV(w);  DQ(AT(w)&RAT?2*AN(w):AN(w), if(*v)auditsimverify0(*v); ++v;)}
  if(!(AFLAG(w)&AFVIRTUAL)&&UCISRECUR(w)){  // process children
@@ -318,7 +337,7 @@ static void auditsimverify0(A w){
   }else if(AT(w)&FUNC) {V* RESTRICT v=VAV(w);
    auditsimverify0(v->fgh[0]); auditsimverify0(v->fgh[1]); auditsimverify0(v->fgh[2]);
   }else if(AT(w)&RAT|XNUM) {
-  }else SEGFAULT  // inadmissible type for recursive usecount
+  }else SEGFAULT;  // inadmissible type for recursive usecount
  }
  R;
 }
@@ -327,13 +346,13 @@ static void auditsimverify0(A w){
 // recur on children if any.  If it produces a delete count higher than the use count in the block, abort
 static void auditsimdelete(A w){I delct;
  if(!w)R;
- if(AN(w)==0xdeadbeefdeadbeef||AN(w)==0xfeeefeeefeeefeee)SEGFAULT
- if((delct = ((AFLAG(w)+=AFAUDITUC)>>AFAUDITUCX))>ACUC(w))SEGFAULT   // hang if too many deletes
- if(AFLAG(w)&AFVIRTUAL && (AT(w)^AFLAG(w))&RECURSIBLE)SEGFAULT   // hang if nonrecursive virtual
+ if((UI)AN(w)==0xdeadbeefdeadbeef||(UI)AN(w)==0xfeeefeeefeeefeee)SEGFAULT;
+ if((delct = ((AFLAG(w)+=AFAUDITUC)>>AFAUDITUCX))>ACUC(w))SEGFAULT;   // hang if too many deletes
+ if(AFLAG(w)&AFVIRTUAL && (AT(w)^AFLAG(w))&RECURSIBLE)SEGFAULT;   // hang if nonrecursive virtual
  if(delct==ACUC(w)&&AFLAG(w)&AFVIRTUAL){A wb = ABACK(w);
   // we fa() the backer, while we mf() the block itself.  So if the backer is NOT recursive, we have to
   // handle nonrecursive children.  All recursible types will be recursive
-  if(AFLAG(w)&AFVIRTUAL && (AT(wb)^AFLAG(wb))&RECURSIBLE)SEGFAULT  // backer must be recursive
+  if(AFLAG(w)&AFVIRTUAL && (AT(wb)^AFLAG(wb))&RECURSIBLE)SEGFAULT;  // backer must be recursive
   auditsimdelete(wb);  // delete backer of virtual block, recursibly
  }
  if(delct==ACUC(w)&&!(AFLAG(w)&AFVIRTUAL)&&(UCISRECUR(w))){  // we deleted down to 0.  process children
@@ -346,7 +365,7 @@ static void auditsimdelete(A w){I delct;
   }else if(AT(w)&FUNC) {V* RESTRICT v=VAV(w);
    auditsimdelete(v->fgh[0]); auditsimdelete(v->fgh[1]); auditsimdelete(v->fgh[2]);
   }else if(AT(w)&RAT|XNUM) {A* v=AAV(w);  DQ(AT(w)&RAT?2*AN(w):AN(w), if(*v)auditsimdelete(*v); ++v;)
-  }else SEGFAULT  // inadmissible type for recursive usecount
+  }else SEGFAULT;  // inadmissible type for recursive usecount
  }
  R;
 }
@@ -369,7 +388,7 @@ static void auditsimreset(A w){I delct;
   }else if(AT(w)&FUNC) {V* RESTRICT v=VAV(w);
    auditsimreset(v->fgh[0]); auditsimreset(v->fgh[1]); auditsimreset(v->fgh[2]);
   }else if(AT(w)&RAT|XNUM) {A* v=AAV(w);  DQ(AT(w)&RAT?2*AN(w):AN(w), if(*v)auditsimreset(*v); ++v;)
-  }else SEGFAULT  // inadmissible type for recursive usecount
+  }else SEGFAULT;  // inadmissible type for recursive usecount
  }
  R;
 }
@@ -404,11 +423,11 @@ R num(0);
 
 // Verify that block w does not appear on tstack more than lim times
 // nextpushp might start out on a boundary
-void audittstack(J jt){
+void audittstack(J jt){F1PREFIP;
 #if BW==64 && MEMAUDIT&2
  if(jt->audittstackdisabled&1)R;
  A *ttop;
- A *nvrav=jt->nvrav;
+ A *nvrav=AAV1(jt->nvra);
  // verify counts start clear
  for(ttop=jt->tnextpushp-!!((I)jt->tnextpushp&(NTSTACKBLOCK-1));ttop;){
   // loop through each entry, skipping the first which is a chain
@@ -441,7 +460,7 @@ void audittstack(J jt){
 
 // Free all symbols pointed to by the SYMB block w.
 static void freesymb(J jt, A w){I j,wn=AN(w); LX k,kt,* RESTRICT wv=LXAV0(w);
- L *jtsympv=jt->sympv;  // Move base of symbol block to a register.  Block 0 is the base of the free chain.  MUST NOT move the base of the free queue to a register,
+ L *jtsympv=LAV0(jt->symp);  // Move base of symbol block to a register.  Block 0 is the base of the free chain.  MUST NOT move the base of the free queue to a register,
   // because when we free a locale it frees its symbols here, and one of them might be a verb that contains a nested SYMB, giving recursion.  It is safe to move sympv to a register because
   // we know there will be no allocations during the free process.
  // First, free the path and name (in the SYMLINFO block), and then free the SYMLINFO block itself
@@ -450,7 +469,7 @@ static void freesymb(J jt, A w){I j,wn=AN(w); LX k,kt,* RESTRICT wv=LXAV0(w);
   fr(LOCNAME(w));
   // clear the data fields   kludge but this is how it was done (should be done in symnew)
   jtsympv[k].name=0;jtsympv[k].val=0;jtsympv[k].sn=0;jtsympv[k].flag=0;
-  jtsympv[k].next=jtsympv[0].next;jtsympv[0].next=k;  // jt->sympv[0] is the base of the free chain
+  jtsympv[k].next=jtsympv[0].next;jtsympv[0].next=k;  // LAV0(jt->symp)[0] is the base of the free chain
  }
  // loop through each hash chain, clearing the blocks in the chain
  for(j=SYMLINFOSIZE;j<wn;++j){
@@ -508,7 +527,7 @@ void jtfh(J jt,A w){fr(w);}
 // mf() frees a block.  If what if freed is a symbol table, all the symbols are freed first.
 
 // mark w incorporated, reassigning if necessary.  Return the address of the block.  Used when w is an rvalue
-A jtincorp(J jt, A w) {RZ(w); INCORP(w); R w;}
+A jtincorp(J jt, A w) {ARGCHK1(w); INCORP(w); R w;}
 
 // allocate a virtual block, given the backing block
 // offset is offset in atoms from start of w; r is rank
@@ -583,7 +602,7 @@ ra(w);   // ensure that the backer is not deleted while it is a backer.
 // Mark the backing block non-PRISTINE, because realize is a form of escaping from the backer
 A jtrealize(J jt, A w){A z; I t;
 // allocate a block of the correct type and size.  Copy the shape
- RZ(w);
+ ARGCHK1(w);
  t=AT(w);
  AFLAG(ABACK(w))&=~AFPRISTINE;  // clear PRISTINE in the backer, since its contents are escaping
  GA(z,t,AN(w),AR(w),AS(w));
@@ -615,7 +634,7 @@ A jtrealize(J jt, A w){A z; I t;
 
 
 A jtgc (J jt,A w,A* old){
- RZ(w);  // return if no input (could be error or unfilled box)
+ ARGCHK1(w);  // return if no input (could be error or unfilled box)
  I c=AC(w);  // remember original usecount/inplaceability
  // We want to avoid realizing w if possible, so we handle virtual w separately
  if(AFLAG(w)&(AFVIRTUAL|AFVIRTUALBOXED)){
@@ -691,7 +710,7 @@ I jtgc3(J jt,A *x,A *y,A *z,A* old){
 // subroutine version of ra without rifv to save space
 static A raonlys(AD * RESTRICT w) { RZ(w);
 #if AUDITEXECRESULTS
- if(AFLAG(w)&(AFVIRTUAL|AFUNINCORPABLE))SEGFAULT
+ if(AFLAG(w)&(AFVIRTUAL|AFUNINCORPABLE))SEGFAULT;
 #endif
  ra(w); R w; }
 
@@ -901,12 +920,12 @@ void jttpop(J jt,A *old){A *endingtpushp;
 // If the noun is assigned as part of a named derived verb, protection is not needed (but harmless) because if the same value is
 // assigned to another name, the usecount will be >1 and therefore not inplaceable.  Likewise, the the noun is non-DIRECT we need
 // only protect the top level, because if the named value is incorporated at a lower level its usecount must be >1.
-F1(jtrat){RZ(w); ras(w); tpush(w); R w;}  // recursive.  w can be zero only if explicit definition had a failing sentence
+F1(jtrat){ARGCHK1(w); ras(w); tpush(w); R w;}  // recursive.  w can be zero only if explicit definition had a failing sentence
 
-A jtras(J jt, AD * RESTRICT w) { RZ(w); realizeifvirtual(w); ra(w); R w; }  // subroutine version of ra() to save space
-A jtra00s(J jt, AD * RESTRICT w) { RZ(w); ra00(w,AT(w)); R w; }  // subroutine version of ra00() to save space
-A jtrifvs(J jt, AD * RESTRICT w) { RZ(w); realizeifvirtual(w); R w; }  // subroutine version of rifv() to save space and be an rvalue
-A jtmkwris(J jt, AD * RESTRICT w) { RZ(w); makewritable(w); R w; }  // subroutine version of makewritable() to save space and be an rvalue
+A jtras(J jt, AD * RESTRICT w) { ARGCHK1(w); realizeifvirtual(w); ra(w); R w; }  // subroutine version of ra() to save space
+A jtra00s(J jt, AD * RESTRICT w) { ARGCHK1(w); ra00(w,AT(w)); R w; }  // subroutine version of ra00() to save space
+A jtrifvs(J jt, AD * RESTRICT w) { ARGCHK1(w); realizeifvirtual(w); R w; }  // subroutine version of rifv() to save space and be an rvalue
+A jtmkwris(J jt, AD * RESTRICT w) { ARGCHK1(w); makewritable(w); R w; }  // subroutine version of makewritable() to save space and be an rvalue
 
 #if MEMAUDIT&8
 static I lfsr = 1;  // holds varying memory pattern
@@ -922,7 +941,7 @@ RESTRICTF A jtgaf(J jt,I blockx){A z;I mfreeb;I n=(I)2<<blockx;  // n=size of al
 auditmemchains();
 #endif
 #if MEMAUDIT&15
-if((I)jt&3)SEGFAULT
+if((I)jt&3)SEGFAULT;
 #endif
  z=jt->mfree[-PMINL+1+blockx].pool;   // tentatively use head of free list as result - normal case, and even if blockx is out of bounds will not segfault
  if(likely(2>*jt->adbreakr)){  // this is JBREAK0, done this way so predicted fallthrough will be true
@@ -932,11 +951,11 @@ if((I)jt&3)SEGFAULT
    // small block: allocate from pool
    mfreeb=jt->mfree[-PMINL+1+blockx].ballo; // bytes in pool allocations
 
-   if(z){         // allocate from a chain of free blocks
+   if(likely(z!=0)){         // allocate from a chain of free blocks
     jt->mfree[-PMINL+1+blockx].pool = AFCHAIN(z);  // remove & use the head of the free chain
 #if MEMAUDIT&1
-    if(AFCHAIN(z)&&FHRHPOOLBIN(AFHRH(AFCHAIN(z)))!=(1+blockx-PMINL))SEGFAULT  // reference the next block to verify chain not damaged
-    if(FHRHPOOLBIN(AFHRH(z))!=(1+blockx-PMINL))SEGFAULT  // verify block has correct size
+    if(AFCHAIN(z)&&FHRHPOOLBIN(AFHRH(AFCHAIN(z)))!=(1+blockx-PMINL))SEGFAULT;  // reference the next block to verify chain not damaged
+    if(FHRHPOOLBIN(AFHRH(z))!=(1+blockx-PMINL))SEGFAULT;  // verify block has correct size
 #endif
    }else{A u,chn; US hrh; I nt=jt->malloctotal;                   // small block, but chain is empty.  Alloc PSIZE and split it into blocks
 #if 1 || ALIGNTOCACHE   // with smaller headers, always align pool allo to cache bdy
@@ -1005,7 +1024,7 @@ if((I)jt&3)SEGFAULT
   }
 #endif
   // If the user is keeping track of memory high-water mark with 7!:2, figure it out & keep track of it.  Otherwise save the cycles
-  if(unlikely((mfreeb&MFREEBCOUNTING))){
+  if(unlikely(((mfreeb&MFREEBCOUNTING)!=0))){
    jt->bytes += n; if(jt->bytes>jt->bytesmax)jt->bytesmax=jt->bytes;
   }
   R z;
@@ -1018,9 +1037,8 @@ RESTRICTF A jtgafv(J jt, I bytes){UI4 j;
  bytes|=(I)1<<(PMINL-1);  // if the memory header itself doesn't meet the minimum buffer length, insert a minimum
 #endif
  CTLZI((UI)bytes,j);  // 3 or 4 should return 2; 5 should return 3
- if((UI)bytes<=(UI)jt->mmax){
-  R jtgaf(jt,(I)j);
- }else{jsignal(EVLIMIT); R 0;}  // do it this way for branch-prediction
+ ASSERT((UI)bytes<=(UI)jt->mmax,EVLIMIT)
+ R jtgaf(jt,(I)j);
 }
 
 RESTRICTF A jtga(J jt,I type,I atoms,I rank,I* shaape){A z;
@@ -1028,22 +1046,21 @@ RESTRICTF A jtga(J jt,I type,I atoms,I rank,I* shaape){A z;
  // trailing NUL (because boolean-op code needs it)
  I bytes = ALLOBYTESVSZ(atoms,rank,bp(type),type&LAST0,0);  // We never use GA for NAME types, so we don't need to check for it
 #if SY_64
- if(!((((unsigned long long)(atoms))&~TOOMANYATOMS)+((rank)&~RMAX))){
+ ASSERT(!((((unsigned long long)(atoms))&~TOOMANYATOMS)+((rank)&~RMAX)),EVLIMIT)
 #else
- if(((I)bytes>(I)(atoms)&&(I)(atoms)>=(I)0)&&!((rank)&~RMAX)){
+ ASSERT(((I)bytes>(I)(atoms)&&(I)(atoms)>=(I)0)&&!((rank)&~RMAX),EVLIMIT)
 #endif
-  RZ(z = jtgafv(jt, bytes));   // allocate the block, filling in AC and AFLAG
-  I akx=AKXR(rank);   // Get offset to data
-  AK(z)=akx; AT(z)=type; AN(z)=atoms;   // Fill in AK, AT, AN
-  // Set rank, and shape if user gives it.  This might leave the shape unset, but that's OK
-  AR(z)=(RANKT)rank;   // Storing the extra last I (as was done originally) might wipe out rank, so defer storing rank till here
-  // Since we allocate powers of 2, we can make the memset a multiple of 32 bytes.  The value of an atomic box would come before the cleared region, but we pick that up here when the shape is cleared
-  if(!(type&DIRECT)){if(SY_64){memset((C*)(AS(z)+1),C0,(bytes-32)&-32);}else{memset((C*)z+akx,C0,bytes+1-akx);}}  // bytes=63=>0 bytes cleared.  bytes=64=>32 bytes cleared.  bytes=64 means the block is 65 bytes long
-  GACOPYSHAPEG(z,type,atoms,rank,shaape)  /* 1==atoms always if t&SPARSE  */  // copy shape by hand since short
-   // Tricky point: if rank=0, GACOPYSHAPEG stores 0 in AS[0] so we don't have to do that in the DIRECT path
-    // All non-DIRECT types have items that are multiples of I, so no need to round the length
-  R z;
- }else{jsignal(EVLIMIT); R 0;}  // do it this way for branch-prediction
+ RZ(z = jtgafv(jt, bytes));   // allocate the block, filling in AC and AFLAG
+ I akx=AKXR(rank);   // Get offset to data
+ AK(z)=akx; AT(z)=type; AN(z)=atoms;   // Fill in AK, AT, AN
+ // Set rank, and shape if user gives it.  This might leave the shape unset, but that's OK
+ AR(z)=(RANKT)rank;   // Storing the extra last I (as was done originally) might wipe out rank, so defer storing rank till here
+ // Since we allocate powers of 2, we can make the memset a multiple of 32 bytes.  The value of an atomic box would come before the cleared region, but we pick that up here when the shape is cleared
+ if(!(type&DIRECT)){if(SY_64){memset((C*)(AS(z)+1),C0,(bytes-32)&-32);}else{memset((C*)z+akx,C0,bytes+1-akx);}}  // bytes=63=>0 bytes cleared.  bytes=64=>32 bytes cleared.  bytes=64 means the block is 65 bytes long
+ GACOPYSHAPEG(z,type,atoms,rank,shaape)  /* 1==atoms always if t&SPARSE  */  // copy shape by hand since short
+  // Tricky point: if rank=0, GACOPYSHAPEG stores 0 in AS[0] so we don't have to do that in the DIRECT path
+   // All non-DIRECT types have items that are multiples of I, so no need to round the length
+ R z;
 }
 
 // free a block.  The usecount must make it freeable
@@ -1052,7 +1069,7 @@ void jtmf(J jt,A w){I mfreeb;
 auditmemchains();
 #endif
 #if MEMAUDIT&15
-if((I)jt&3)SEGFAULT
+if((I)jt&3)SEGFAULT;
 #endif
 #if LEAKSNIFF
  if(leakcode){I i;
@@ -1068,11 +1085,11 @@ if((I)jt&3)SEGFAULT
  I blockx=FHRHPOOLBIN(hrh);   // pool index, if pool
  I allocsize;  // size of full allocation for this block
  // SYMB must free as a monolith, with the symbols returned when the hashtables are
- if(AT(w)==SYMB){
+ if(unlikely(AT(w)==SYMB)){
   freesymb(jt,w);
  }
 #if MEMAUDIT&1
- if(hrh==0 || blockx>(PLIML-PMINL+1))SEGFAULT  // pool number must be valid
+ if(hrh==0 || blockx>(PLIML-PMINL+1))SEGFAULT;  // pool number must be valid
 #if MEMAUDIT&17
 #endif
 #endif
@@ -1084,7 +1101,7 @@ if((I)jt&3)SEGFAULT
   mfreeb = jt->mfree[blockx].ballo;   // number of bytes allocated at this size (biased zero point)
   AFCHAIN(w)=jt->mfree[blockx].pool;  // append free list to the new addition...
   jt->mfree[blockx].pool=w;   //  ...and make new addition the new head
-  if(0 > (mfreeb-=allocsize))jt->uflags.us.uq.uq_c.spfreeneeded=1;  // Indicate we have one more free buffer;
+  if(unlikely(0 > (mfreeb-=allocsize)))jt->uflags.us.uq.uq_c.spfreeneeded=1;  // Indicate we have one more free buffer;
    // if this kicks the list into garbage-collection mode, indicate that
   jt->mfree[blockx].ballo=mfreeb;
  }else{                // buffer allocated from subpool.
@@ -1102,7 +1119,7 @@ if((I)jt&3)SEGFAULT
 #endif
   jt->mfreegenallo = mfreeb-allocsize;
  }
- if(mfreeb&MFREEBCOUNTING){jt->bytes -= allocsize;}  // keep track of total allocation only if asked to
+ if(unlikely(mfreeb&MFREEBCOUNTING)){jt->bytes -= allocsize;}  // keep track of total allocation only if asked to
 }
 
 // allocate header with rank r; if r==1, move the item count to be the shape also
@@ -1121,9 +1138,9 @@ RESTRICTF A jtgah(J jt,I r,A w){A z;
 
 // clone w, returning the address of the cloned area.  Result is NOT recursive, not AFRO, not virtual
 F1(jtca){A z;I t;P*wp,*zp;
- RZ(w);
+ ARGCHK1(w);
  t=AT(w);
- if(unlikely(t&SPARSE)){
+ if(unlikely((t&SPARSE)!=0)){
   GASPARSE(z,t,AN(w),AR(w),AS(w))
   wp=PAV(w); zp=PAV(z);
   SPB(zp,a,ca(SPA(wp,a)));
@@ -1137,7 +1154,7 @@ F1(jtca){A z;I t;P*wp,*zp;
  R z;
 }
 // clone block only if it is read-only
-F1(jtcaro){ if(AFLAG(w)&AFRO)RETF(ca(w)); RETF(w); }
+F1(jtcaro){ if(AFLAG(w)&AFRO){RETF(ca(w));} RETF(w); }
 
 // clone recursive.
 F1(jtcar){A*u,*wv,z;I n;P*p;V*v;
@@ -1176,7 +1193,7 @@ B jtspc(J jt){A z; RZ(z=MALLOC(1000)); FREECHK(z); R 1; }  // see if 1000 bytes 
 // if b=1, the result will replace w, so decrement usecount of w and increment usecount of new buffer
 // the itemcount of the result is set as large as will fit evenly, and the atomcount is adjusted accordingly
 A jtext(J jt,B b,A w){A z;I c,k,m,m1,t;
- RZ(w);                               /* assume AR(w)&&AN(w)    */
+ ARGCHK1(w);                               /* assume AR(w)&&AN(w)    */
  m=AS(w)[0]; PROD(c,AR(w)-1,AS(w)+1); t=AT(w); k=c*bp(t);
  GA(z,t,2*AN(w)+(AN(w)?0:c),AR(w),0);  // ensure we allocate SOMETHING to make progress
  m1=allosize(z)/k;  // start this divide before the copy

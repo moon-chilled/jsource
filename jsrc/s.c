@@ -16,39 +16,46 @@
 /* the global symbol pool is a type INT matrix                             */
 /* the number of columns is symcol=ceiling(sizeof(L)/sizeof(I))            */
 /* elements are interpreted per type L (see jtype.h)                       */
-/* a stack of free entries is kept using the next pointer                  */
-/* jt->symp:     symbol pool array                                         */
-/* jt->sympv:    symbol pool array pointer, (L*)AV(jt->symp)               */
-/* jt->symindex: symbol table index (monotonically increasing)             */
+/* a linked list of free entries is kept using the next pointer                  */
+// jt->symp:     symbol pool array fixed rank 0, holding L entries (each 3 Is (4 in 32-bit))
+// LXAV0(jt->symp)    symbol pool array base.  First ele is base of free chain
+// AM(jt->symp) symbol table index (monotonically increasing) - not really needed
+
 
 /* numbered locales:                                                       */
-/* jt->stnum: -1 means free; others are numbers in use                     */
-/* jt->stptr:  0 means free; others are symbol tables                      */
-/* jt->stused: # entries in stnum/stptr in use                             */
-/* jt->stmax:  1 + maximum number extant                                   */
+// jt->stnum   A block, data is hashtable holding symtab pointer or 0.  Fixed rank 0
+// AN(jt->stnum) size of hashtable in entries (each 1 L*)
+// AK(jt->stnum) next loc# to allocate
+// AM(jt->stnum) number of entries in use in table
+// obsolete /* jt->stnum: -1 means free; others are numbers in use                     */
+// obsolete/* jt->stptr:  0 means free; others are symbol tables                      */
+// obsolete/* jt->stused: # entries in stnum/stptr in use                             */
+// obsolete/* jt->stmax:  1 + maximum number extant                                   */
 
 /* named locales:                                                          */
 /* jt->stloc:  locales symbol table                                        */
 
 
-static I symcol=(sizeof(L)+SZI-1)/SZI;
+#define symcol ((sizeof(L)+SZI-1)/SZI)
 
-B jtsymext(J jt,B b){A x,y;I j,m,n,s[2],*v,xn,yn;L*u;
- if(b){y=jt->symp; j=allosize(y)+NORMAH*SZI; n=AS(y)[0]; yn=AN(y);}  // extract allo size from header (approx)
- else {            j=((I)1)<<12;            n=1;      yn=0;    }
+B jtsymext(J jt,B b){A x,y;I j,m,n/*obsolete ,s[2]*/,*v,xn,yn;L*u;
+ if(b){y=jt->symp; j=allosize(y)+NORMAH*SZI; /* obsolete n=AS(y)[0];*/ yn=AN(y); n=yn/symcol;}  // extract allo size from header (approx)
+ else {            j=((I)1)<<12;            /* obsolete n=1;*/      yn=0; n=1;   }  // n is # rows in chain base + old values
  m=j<<1;                              /* new size in bytes           */
- m-=SZI*(NORMAH+2);                  /* less array overhead         */
+ m-=AKXR(0);                  /* less array overhead         */
  m/=symcol*SZI;                             /* new # rows                  */
- s[0]=m; s[1]=symcol; xn=m*symcol;          /* new pool array shape        */
- GATVR(x,INT,xn,2,s); v=AV(x);                 /* new pool array              */
- if(b)ICPY(v,AV(y),yn);                     /* copy old data to new array  */
+// obsolete  s[0]=m; s[1]=symcol;
+ xn=m*symcol;          /* new pool array atoms        */
+// obsolete  GATVR(x,INT,xn,2,s); v=AV(x);                 /* new pool array              */
+ GATV0(x,INT,xn,0); v=(I*)LAV0(x);                 /* new pool array              */
+ if(b)ICPY(v,LAV0(y),yn);                     /* copy old data to new array  */
  memset(v+yn,C0,SZI*(xn-yn));               /* 0 unused area for safety    */
  u=n+(L*)v; j=1+n;
  DQ(m-n-1, u++->next=(LX)(j++););                 /* build free list extension, leave last chain 0   */
- if(b)u->next=jt->sympv->next;              /* push extension onto stack   */
- ((L*)v)->next=(LX)n;                           /* new stack top               */
+ if(b)u->next=LAV0(jt->symp)->next;              /* push extension onto stack   */
+ ((L*)v)->next=(LX)n;                           /* new base of free chain               */
  ras(x); jt->symp=x;                           /* preserve new array          */
- jt->sympv=(L*)AV(x);                       /* new array value ptr         */
+// obsolete  LAV0(jt->symp)=LAV0(x);                       /* new array value ptr         */
  if(b)fa(y);                                /* release old array           */
  R 1;
 }    /* 0: initialize (no old array); 1: extend old array */
@@ -57,15 +64,15 @@ B jtsymext(J jt,B b){A x,y;I j,m,n,s[2],*v,xn,yn;L*u;
 // if tailx==0, append at head (immediately after *hv); if tailx!=0, append to tail.  If queue is empty, tail is always 0
 // result is new symbol
 L* jtsymnew(J jt,LX*hv, LX tailx){LX j;L*u,*v;
- while(!(j=jt->sympv->next))RZ(symext(1));  /* extend pool if req'd        */
- jt->sympv->next=(j+jt->sympv)->next;       /* new top of stack            */
- u=j+jt->sympv;  // the new symbol.  u points to it, j is its index
- if(tailx) {L *t=tailx+jt->sympv;
+ while(!(j=LAV0(jt->symp)->next))RZ(symext(1));  /* extend pool if req'd        */
+ LAV0(jt->symp)->next=(j+LAV0(jt->symp))->next;       /* new top of stack            */
+ u=j+LAV0(jt->symp);  // the new symbol.  u points to it, j is its index
+ if(tailx) {L *t=tailx+LAV0(jt->symp);
   // appending to tail.  Queue is known to be nonempty
   u->next=0;t->next=j;  // it's always the end: point to next & prev, and chain from prev
  }else{
   // appending to head.
-  if(u->next=*hv){v=*hv+jt->sympv;}  // chain old queue to u; if not empty, backchain old head to new one, clear old head flag, 
+  if(u->next=*hv){v=*hv+LAV0(jt->symp);}  // chain old queue to u; if not empty, backchain old head to new one, clear old head flag, 
   *hv=j;   // set new head
  }
  R u;
@@ -76,7 +83,7 @@ L* jtsymnew(J jt,LX*hv, LX tailx){LX j;L*u,*v;
 // Reset the fields in the deleted blocks.  If any modifiers are deleted, increment modifiercounter to reset name lookups
 // This is used only for freeing local symbol tables, thus does not need to clear the name/path
 extern void jtsymfreeha(J jt, A w){I j,wn=AN(w); LX k,* RESTRICT wv=LXAV0(w);
- L *jtsympv=jt->sympv;  // Move base of symbol block to a register.  Block 0 is the base of the free chain.  MUST NOT move the base of the free queue to a register,
+ L *jtsympv=LAV0(jt->symp);  // Move base of symbol block to a register.  Block 0 is the base of the free chain.  MUST NOT move the base of the free queue to a register,
   // because when we free a locale it frees its symbols here, and one of them might be a verb that contains a nested SYMB, giving recursion.  It is safe to move sympv to a register because
   // we know there will be no allocations during the free process.
  // loop through each hash chain, clearing the blocks in the chain.  Do not clear chain 0, which holds x/y bucket numbers
@@ -120,11 +127,12 @@ extern void jtsymfreeha(J jt, A w){I j,wn=AN(w); LX k,* RESTRICT wv=LXAV0(w);
 static SYMWALK(jtsympoola, I,INT,100,1, 1, *zv++=j;)
 
 F1(jtsympool){A aa,q,x,y,*yv,z,*zv;I i,n,*u,*xv;L*pv;LX j,*v;
- RZ(w); 
+ ARGCHK1(w); 
  ASSERT(1==AR(w),EVRANK); 
  ASSERT(!AN(w),EVLENGTH);
  GAT0(z,BOX,3,1); zv=AAV(z);
- n=AS(jt->symp)[0]; pv=jt->sympv;
+// obsolete  n=AS(jt->symp)[0]; pv=LAV0(jt->symp);
+ n=AN(jt->symp)/symcol; pv=LAV0(jt->symp);
  GATV0(x,INT,n*5,2); AS(x)[0]=n; AS(x)[1]=5; xv= AV(x); zv[0]=incorp(x);
  GATV0(y,BOX,n,  1);                         yv=AAV(y); zv[1]=incorp(y);
  for(i=0;i<n;++i,++pv){         /* per pool entry       */
@@ -140,8 +148,8 @@ F1(jtsympool){A aa,q,x,y,*yv,z,*zv;I i,n,*u,*xv;L*pv;LX j,*v;
  DO(n, yv[i]=mtv;);
  n=AN(jt->stloc); v=LXAV0(jt->stloc); 
  for(i=0;i<n;++i){  // for each chain-base in locales pool
-  for(j=v[i];j;j=(j+jt->sympv)->next){      // j is index to named local entry; process the chain
-   x=(j+jt->sympv)->val;  // x->symbol table for locale
+  for(j=v[i];j;j=LAV0(jt->symp)[j].next){      // j is index to named local entry; process the chain
+   x=LAV0(jt->symp)[j].val;  // x->symbol table for locale
    RZ(yv[j]=yv[LXAV0(x)[0]]=aa=incorp(sfn(SFNSIMPLEONLY,LOCNAME(x))));  // install name in the entry for the locale
    RZ(q=sympoola(x)); u=AV(q); DO(AN(q), yv[u[i]]=aa;);
   }
@@ -166,11 +174,11 @@ L* jtprobedel(J jt,I l,C*string,UI4 hash,A g){
  while(1){
   LX delblockx=*asymx;
   if(!delblockx)R 0;  // if chain empty or ended, not found
-  L *sym=jt->sympv+delblockx;
+  L *sym=LAV0(jt->symp)+delblockx;
   IFCMPNAME(NAV(sym->name),string,l,     // (1) exact match - if there is a value, use this slot, else say not found
     {
      SYMVALFA(*sym); sym->val=0;   // decr usecount in value; remove value from symbol
-     if(!(sym->flag&LPERMANENT)){*asymx=sym->next; fr(sym->name); sym->name=0; sym->flag=0; sym->sn=0; sym->next=jt->sympv[0].next; jt->sympv[0].next=delblockx;}
+     if(!(sym->flag&LPERMANENT)){*asymx=sym->next; fr(sym->name); sym->name=0; sym->flag=0; sym->sn=0; sym->next=LAV0(jt->symp)[0].next; LAV0(jt->symp)[0].next=delblockx;}
      R sym;
     }
    // if match, bend predecessor around deleted block, return address of match (now deleted but still points to value)
@@ -186,7 +194,7 @@ L*jtprobe(J jt,I l,C*string,UI4 hash,A g){
  LX symx=LXAV0(g)[SYMHASH(hash,AN(g)-SYMLINFOSIZE)];  // get index of start of chain
  while(1){
   if(!symx)R 0;  // if chain empty or ended, not found
-  L *sym=jt->sympv+symx;
+  L *sym=LAV0(jt->symp)+symx;
   IFCMPNAME(NAV(sym->name),string,l,R sym->val?sym:0;)     // (1) exact match - if there is a value, use this slot, else say not found
   symx=sym->next;   // mismatch - step to next
  }
@@ -195,41 +203,41 @@ L*jtprobe(J jt,I l,C*string,UI4 hash,A g){
 // a is A for name; result is L* address of the symbol-table entry in the local symbol table, if there is one
 // If the value is empty, return 0 for not found
 // This code is copied in p.c
-L *jtprobelocal(J jt,A a){NM*u;I b,bx;
+L *jtprobelocal(J jt,A a,A locsyms){NM*u;I b,bx;
  // There is always a local symbol table, but it may be empty
- RZ(a);u=NAV(a);  // u->NM block
- if(b = u->bucket){
+ ARGCHK1(a);u=NAV(a);  // u->NM block
+ if(likely((b = u->bucket)!=0)){
   if(0 > (bx = ~u->bucketx)){
    // positive bucketx (now negative); that means skip that many items and then do name search.  This is set for words that were recognized as names but were not detected as assigned-to in the definition
    // If no new names have been assigned since the table was created, we can skip this search, since it must fail (this is the path for words in z eg)
-   if(likely(!(AR(jt->locsyms)&LNAMEADDED)))R 0;
-   LX lx = LXAV0(jt->locsyms)[b];  // index of first block if any
+   if(likely(!(AR(locsyms)&LNAMEADDED)))R 0;
+   LX lx = LXAV0(locsyms)[b];  // index of first block if any
    I m=u->m; C* s=u->s;  // length/addr of name from name block
-   while(0>++bx){lx = jt->sympv[lx].next;}
+   while(0>++bx){lx = LAV0(jt->symp)[lx].next;}
    // Now lx is the index of the first name that might match.  Do the compares
-   while(lx) {L* l = lx+jt->sympv;  // symbol entry
+   while(lx) {L* l = lx+LAV0(jt->symp);  // symbol entry
     IFCMPNAME(NAV(l->name),s,m,R l->val?l : 0;)
     lx = l->next;
    }
    R 0;  // no match.
   } else {
-   LX lx = LXAV0(jt->locsyms)[b];  // index of first block if any
-   L* l = lx+jt->sympv;  // fetch hashchain headptr, point to L for first symbol
+   LX lx = LXAV0(locsyms)[b];  // index of first block if any
+   L* l = lx+LAV0(jt->symp);  // fetch hashchain headptr, point to L for first symbol
    // negative bucketx (now positive); skip that many items, and then you're at the right place
-   while(bx--){l = l->next+jt->sympv;}
+   while(bx--){l = l->next+LAV0(jt->symp);}
    R l->val?l:0;
   }
  } else {
   // No bucket information, do full search.  This includes names that don't come straight from words in an explicit definition
-  R probe(NAV(a)->m,NAV(a)->s,NAV(a)->hash,jt->locsyms);
+  R probe(NAV(a)->m,NAV(a)->s,NAV(a)->hash,locsyms);
  }
 }
 
 // a is A for name; result is L* address of the symbol-table entry in the local symbol table (which must exist)
 // If not found, one is created
-L *jtprobeislocal(J jt,A a){NM*u;I b,bx;
+L *jtprobeislocal(J jt,A a){NM*u;I b,bx;L *sympv=LAV0(jt->symp);
  // If there is bucket information, there must be a local symbol table, so search it
- RZ(a);u=NAV(a);  // u->NM block
+ ARGCHK1(a);u=NAV(a);  // u->NM block
  if(b = u->bucket){
   LX lx = LXAV0(jt->locsyms)[b];  // index of first block if any
   if(0 > (bx = ~u->bucketx)){
@@ -239,10 +247,10 @@ L *jtprobeislocal(J jt,A a){NM*u;I b,bx;
    LX tx = lx;  // tx will hold the address of the last item in the chain, in case we have to add a new symbol
    L* l;
 
-   while(0>++bx){tx = lx; lx = jt->sympv[lx].next;}
+   while(0>++bx){tx = lx; lx = sympv[lx].next;}
    // Now lx is the index of the first name that might match.  Do the compares
    while(lx) {
-    l = lx+jt->sympv;  // symbol entry
+    l = lx+sympv;  // symbol entry
     IFCMPNAME(NAV(l->name),s,m,R l;)
     tx = lx; lx = l->next;
    }
@@ -251,9 +259,9 @@ L *jtprobeislocal(J jt,A a){NM*u;I b,bx;
    ras(a); l->name=a;  // point symbol table to the name block, and increment its use count accordingly
    AR(jt->locsyms)|=LNAMEADDED;  // Mark that a name has been added beyond what was known at preprocessing time
    R l;
-  } else {L* l = lx+jt->sympv;  // fetch hashchain headptr, point to L for first symbol
+  } else {L* l = lx+sympv;  // fetch hashchain headptr, point to L for first symbol
    // negative bucketx (now positive); skip that many items, and then you're at the right place
-   while(bx--){l = l->next+jt->sympv;}
+   while(bx--){l = l->next+sympv;}
    R l;  // return 
   }
  } else {
@@ -271,15 +279,15 @@ L *jtprobeislocal(J jt,A a){NM*u;I b,bx;
 // g is symbol table to use
 // result is L* symbol-table entry to use
 // if not found, one is created
-L*jtprobeis(J jt,A a,A g){C*s;LX *hv,tx;I m;L*v;NM*u;
+L*jtprobeis(J jt,A a,A g){C*s;LX *hv,tx;I m;L*v;NM*u;L *sympv=LAV0(jt->symp);
  u=NAV(a); m=u->m; s=u->s; hv=LXAV0(g)+SYMHASH(u->hash,AN(g)-SYMLINFOSIZE);  // get bucket number among the hash tables
  if(tx=*hv){                                 /* !*hv means (0) empty slot    */
-  v=tx+jt->sympv;
+  v=tx+sympv;
   while(1){                               
    u=NAV(v->name);
    IFCMPNAME(u,s,m,R v;)    // (1) exact match - may or may not have value
    if(!v->next)break;                                /* (2) link list end */
-   v=(tx=v->next)+jt->sympv;
+   v=(tx=v->next)+sympv;
   }
  }
  // not found, create new symbol.  If tx is 0, the queue is empty, so adding at the head is OK; otherwise add after tx
@@ -334,7 +342,7 @@ static A jtlocindirect(J jt,I n,C*u,UI4 hash){A x,y;C*s,*v,*xv;I k,xn;
   if(AT(y)&(INT|B01)){g=findnl(BIV0(y)); ASSERT(g!=0,EVLOCALE);  // if atomic integer, look it up
   }else{
    ASSERTN(BOX&AT(y),EVDOMAIN,nfs(k,v));  // verify box
-   x=AAV0(y); if((((I)AR(x)-1)&-(AT(x)&(INT|B01)))<0) {
+   x=AAV(y)[0]; if((((I)AR(x)-1)&-(AT(x)&(INT|B01)))<0) {
     // Boxed integer - use that as bucketx
     g=findnl(BIV0(x)); ASSERT(g!=0,EVLOCALE);  // boxed integer, look it up
    }else{
@@ -361,21 +369,21 @@ A jtsybaseloc(J jt,A a) {I m,n;NM*v;
 // look up a name (either simple or locative) using the full name resolution
 // result is symbol-table slot for the name if found, or 0 if not found
 // This code is copied in p.c
-L*jtsyrd(J jt,A a){A g;
- RZ(a);
+L*jtsyrd(J jt,A a,A locsyms){A g;
+ ARGCHK1(a);
  if(!(NAV(a)->flag&(NMLOC|NMILOC))){L *e;
   // If there is a local symbol table, search it first
-  if(e = probelocal(a)){R e;}  // return flagging the result if local
-  g=jt->global;  // Start with the current locale
+  if(e = probelocal(a,locsyms)){R e;}  // return flagging the result if local
+  g=jt->global;  // Continue with the current locale
  } else RZ(g=sybaseloc(a));
  R syrd1(NAV(a)->m,NAV(a)->s,NAV(a)->hash,g);  // Not local: look up the name starting in locale g
 }
 // same, but return locale in which found
 A jtsyrdforlocale(J jt,A a){A g;
- RZ(a);
+ ARGCHK1(a);
  if(!(NAV(a)->flag&(NMLOC|NMILOC))){L *e;
   // If there is a local symbol table, search it first
-  if(e = probelocal(a)){R jt->locsyms;}  // return flagging the result if local
+  if(e = probelocal(a,jt->locsyms)){R jt->locsyms;}  // return flagging the result if local
   g=jt->global;  // Start with the current locale
  } else RZ(g=sybaseloc(a));
  R syrd1forlocale(NAV(a)->m,NAV(a)->s,NAV(a)->hash,g);  // Not local: look up the name starting in locale g
@@ -385,7 +393,7 @@ A jtsyrdforlocale(J jt,A a){A g;
 // result is symbol-table slot for the name if found, or 0 if not found
 // This code is copied in p.c
 L*jtsyrdnobuckets(J jt,A a){A g;
- RZ(a);
+ ARGCHK1(a);
  if(!(NAV(a)->flag&(NMLOC|NMILOC))){L *e;
   // If there is a local symbol table, search it first
   if(!NAV(a)->bucket && (e = probe(NAV(a)->m,NAV(a)->s,NAV(a)->hash,jt->locsyms))){R e;}  // return if found locally from name
@@ -396,12 +404,12 @@ L*jtsyrdnobuckets(J jt,A a){A g;
 
 
 static A jtdllsymaddr(J jt,A w,C flag){A*wv,x,y,z;I i,n,*zv;L*v;
- RZ(w);
+ ARGCHK1(w);
  n=AN(w); wv=AAV(w); 
  ASSERT(!n||BOX&AT(w),EVDOMAIN);
  GATV(z,INT,n,AR(w),AS(w)); zv=AV(z); 
  for(i=0;i<n;++i){
-  x=wv[i]; v=syrd(nfs(AN(x),CAV(x))); 
+  x=wv[i]; v=syrd(nfs(AN(x),CAV(x)),jt->locsyms); 
   ASSERT(v!=0,EVVALUE);
   y=v->val;
   ASSERT(NOUN&AT(y),EVDOMAIN);
@@ -414,25 +422,25 @@ F1(jtdllsymget){R dllsymaddr(w,0);}
 F1(jtdllsymdat){R dllsymaddr(w,1);}
 
 // look up the name w using full name resolution.  Return the value if found, abort if not found or invalid name
-F1(jtsymbrd){L*v; RZ(w); ASSERTN(v=syrd(w),EVVALUE,w); R v->val;}
+F1(jtsymbrd){L*v; ARGCHK1(w); ASSERTN(v=syrd(w,jt->locsyms),EVVALUE,w); R v->val;}
 
 // look up name w, return value unless locked or undefined; then return just the name
 F1(jtsymbrdlocknovalerr){A y;L *v;
- if(!(v=syrd(w))){
+ if(!(v=syrd(w,jt->locsyms))){
   // no value.  Could be undefined name (no error) or some other error including value error, which means error looking up an indirect locative
   // If error, abort with it; if undefined, return a reference to the undefined name
   RE(0);   // if not simple undefined, error
-  R nameref(w);  // return reference to undefined name
+  R nameref(w,jt->locsyms);  // return reference to undefined name
  }
  // no error.  Return the value unless locked function
  y=v->val;
- R FUNC&AT(y)&&(jt->uflags.us.cx.cx_c.glock||VLOCK&FAV(y)->flag)?nameref(w):y;
+ R FUNC&AT(y)&&(jt->uflags.us.cx.cx_c.glock||VLOCK&FAV(y)->flag)?nameref(w,jt->locsyms):y;
 }
 
 // Same, but value error if name not defined
 F1(jtsymbrdlock){A y;
  RZ(y=symbrd(w));
- R FUNC&AT(y)&&(jt->uflags.us.cx.cx_c.glock||VLOCK&FAV(y)->flag)?nameref(w):y;
+ R FUNC&AT(y)&&(jt->uflags.us.cx.cx_c.glock||VLOCK&FAV(y)->flag)?nameref(w,jt->locsyms):y;
 }
 
 
@@ -441,7 +449,7 @@ F1(jtsymbrdlock){A y;
 B jtredef(J jt,A w,L*v){A f;DC c,d;
  // find the most recent DCCALL, exit if none
  d=jt->sitop; while(d&&!(DCCALL==d->dctype&&d->dcj))d=d->dclnk; if(!(d&&DCCALL==d->dctype&&d->dcj))R 1;
- if(v==(L*)d->dcn){  // if the saved jt->cursymb (from the unquote lookup) matches the name being assigned...
+ if(v==(L*)d->dcn){  // if the saved stabent (from the unquote lookup) matches the name being assigned...
   // insist that the redefinition have the same type, and the same explicit character
   f=d->dcf;
   ASSERTN(TYPESEQ(AT(f),AT(w))&&(CCOLON==FAV(f)->id)==(CCOLON==FAV(w)->id),EVSTACK,d->dca);
@@ -460,7 +468,7 @@ B jtredef(J jt,A w,L*v){A f;DC c,d;
 // find symbol entry for name a in symbol table g; this is known to be global assignment
 // the name a may require lookup through the path; once we find the locale, we search only in it
 // Result is &symbol-table entry, if one exists
-L* jtprobeisquiet(J jt,A a){A g;
+L* jtprobeisquiet(J jt,A a,A locsyms){A g;  // locsyms is used in the call, but is not needed in the function
  I n=AN(a); NM* v=NAV(a); I m=v->m;  // n is length of name, v points to string value of name, m is length of non-locale part of name
  if(n==m){g=jt->global;}   // if not locative, define in default locale
  else{C* s=1+m+v->s; if(!(g=NMILOC&v->flag?locindirect(n-m-2,1+s,(UI4)v->bucketx):stfindcre(n-m-2,s,v->bucketx))){RESETERR; R 0;}}  // if locative, find the locale for the assignment; error is not fatal
@@ -471,17 +479,17 @@ L* jtprobeisquiet(J jt,A a){A g;
 // assign symbol: assign name a in symbol table g to the value w (but g is special if jt->assignsym is nonnull)
 // Result points to the symbol-table block for the assignment
 L* jtsymbis(J jt,A a,A w,A g){A x;I m,n,wn,wr,wt;L*e;
- RZ(a&&w&&g);
+ ARGCHK2(a,w); RZ(g)
  // If we have an assignsym, we have looked this name up already, so just use the symbol-table entry found then
  // in this case g is the type field of the name being assigned; and jt->locsyms must exist, since it comes from
  // an explicit definition
  if(jt->assignsym) {
-  ASSERT(((I)g&ASGNLOCAL||NAV(a)->flag&(NMLOC|NMILOC)||!probelocal(a)),EVDOMAIN)  //  if global assignment not to locative, verify non locally defined
+  ASSERT(((I)g&ASGNLOCAL||NAV(a)->flag&(NMLOC|NMILOC)||!probelocal(a,jt->locsyms)),EVDOMAIN)  //  if global assignment not to locative, verify non locally defined
   e = jt->assignsym;   // point to the symbol-table entry being assigned
   CLEARZOMBIE   // clear until next use.
  } else {A jtlocal=jt->locsyms;
   n=AN(a); NM *v=NAV(a); m=v->m;  // n is length of name, v points to string value of name, m is length of non-locale part of name
-  if(n==m)ASSERT(!(g==jt->global&&probelocal(a)),EVDOMAIN)  // if non-locative, give error if there is a local
+  if(n==m)ASSERT(!(g==jt->global&&probelocal(a,jtlocal)),EVDOMAIN)  // if non-locative, give error if there is a local
     // symbol table, and we are assigning to the global symbol table, and the name is defined in the local table
   else{C*s=1+m+v->s; RZ(g=NMILOC&v->flag?locindirect(n-m-2,1+s,(UI4)v->bucketx):stfindcre(n-m-2,s,v->bucketx));}
     // locative: s is the length of name_.  Find the symbol table to use, creating one if none found
@@ -498,7 +506,7 @@ L* jtsymbis(J jt,A a,A w,A g){A x;I m,n,wn,wr,wt;L*e;
  I xt;  // If not assigned, use empty type
  if(x){
    xaf=AFLAG(x); xt=AT(x); // if assigned, get the actual flags, from the name and the old value
-   if(unlikely(e->flag&LWASABANDONED)){
+   if(unlikely((e->flag&LWASABANDONED)!=0)){
      // Reassigning an x/y that was abandoned into this execution.  We did not increment the value when we started, so we'd better not decrement now.
      // However, we did change 8..1 to 1, and if the 1 is still there, we set it back to 8..1 so that the caller can see that the value is unincorporated.
      // The case where x==w is of interest (it comes up in x =. x , 5).  In that case we will not change the usecount of x/w below, so we have to keep the ABANDONED
@@ -512,7 +520,7 @@ L* jtsymbis(J jt,A a,A w,A g){A x;I m,n,wn,wr,wt;L*e;
   // Normal case of non-memory-mapped assignment.
   // If we are assigning the same data block that's already there, don't bother with changing use counts or anything else
   if(likely(x!=w)){
-   if(unlikely((xt|AT(w))&(VERB|CONJ|ADV))){
+   if(unlikely(((xt|AT(w))&(VERB|CONJ|ADV))!=0)){
     // When we assign to, or reassign, a modifier, invalidate all the lookups of modifiers that are extant
     // It's a pity that we have to do this for ALL assignments, even assignments to uv.  If we don't, a reference to a local modifier may get passed in, and
     // it will still be considered valid even though the local names have disappeared.  Maybe we could avoid this if the local namespace has no defined modifiers - but then we'd have to keep up with that...
@@ -531,8 +539,8 @@ L* jtsymbis(J jt,A a,A w,A g){A x;I m,n,wn,wr,wt;L*e;
    // won't be freed till later.  By deferring all deletions we don't have to worry about whether local values are on the stack; and that allows us to avoid putting local values
    // on the NVR stack at all.
    // ABANDONED values can never be NVR (which are never inplaceable), so they will be flagged as !NVR,!UNFREED,ABANDONED
-   if(likely(xaf&(AFNVRUNFREED))){  // x is 0, or unfreed on the NVR stack, or abandoned.  Do not fa().  0 is probably the normal case (assignment to unassigned name)
-    if(unlikely(xaf&AFNVR)){AFLAG(x)=(xaf&=~AFNVRUNFREED);} // If unfreed on the NVR stack, mark as to-be-freed on the stack.  This defers the deletion
+   if(likely((xaf&AFNVRUNFREED)!=0)){  // x is 0, or unfreed on the NVR stack, or abandoned.  Do not fa().  0 is probably the normal case (assignment to unassigned name)
+    if(unlikely((xaf&AFNVR)!=0)){AFLAG(x)=(xaf&=~AFNVRUNFREED);} // If unfreed on the NVR stack, mark as to-be-freed on the stack.  This defers the deletion
     // x=0 case, and LABANDONED case, go through quietly making no change to the usecount of x
    }else{  // x is non0 and either already marked as freed on the NVR stack or must be put there now, or VIRTUAL
     if(!(xaf&(AFNVR|AFVIRTUAL))){
@@ -541,9 +549,9 @@ L* jtsymbis(J jt,A a,A w,A g){A x;I m,n,wn,wr,wt;L*e;
      // if we knew this is a final assignment
      // (2) the value is not VIRTUAL.  The only way for an assigned value to be VIRTUAL is for it to be an initial assignment to x/y.  And to get here
      // the value must not have been adandoned.  So the usecount was raised on assignment (otherwise we would have gone through the no-fa special case).  So it is safe to fa() immediately then
-     A *nvrav=jt->nvrav;
-     if(unlikely((jt->parserstackframe.nvrtop+1U) > jt->nvran))RZ(nvrav=extnvr());  // Extend nvr stack if necessary.  copied from parser
-     nvrav[jt->parserstackframe.nvrtop++] = x;   // record the place where the value was protected (i. e. this sentence); it will be freed when this sentence finishes
+     A nvra=jt->nvra;
+     if(unlikely((I)(jt->parserstackframe.nvrtop+1U) > AN(nvra)))RZ(nvra=extnvr());  // Extend nvr stack if necessary.  copied from parser
+     AAV1(nvra)[jt->parserstackframe.nvrtop++] = x;   // record the place where the value was protected (i. e. this sentence); it will be freed when this sentence finishes
      AFLAG(x) |= AFNVR;  // mark the value as protected in NVR stack
     }else{
      // already NVR+FREED or VIRTUAL: free this time, knowing the real free will happen later,  We know usecount>1, but it may be PERMANENT; decrement it if not
@@ -562,8 +570,8 @@ L* jtsymbis(J jt,A a,A w,A g){A x;I m,n,wn,wr,wt;L*e;
    AT(x)=wt; AN(x)=wn; AR(x)=(RANKT)wr; MCISH(AS(x),AS(w),wr); MC(AV(x),AV(w),m);  // copy in the data
   }
  }
- e->sn=jt->slisti;  // Save the script in which this name was defined
- if(unlikely(jt->stch))e->flag|=LCH;  // update 'changed' flag if enabled - no harm in marking locals too
+ e->sn=AM(jt->slist);  // Save the script in which this name was defined
+ if(unlikely(jt->stch!=0))e->flag|=LCH;  // update 'changed' flag if enabled - no harm in marking locals too
  R e;   // return the block for the assignment
 }    /* a: name; w: value; g: symbol table */
 
@@ -572,13 +580,13 @@ L* jtsymbis(J jt,A a,A w,A g){A x;I m,n,wn,wr,wt;L*e;
 // Values awaiting deletion are accumulated within the NVR stack till the sentence ends.  If there is an assignment not in a sentence, such as for for_x. or from sockets or DLLs,
 // we have to finish the deletion immediately so that the NVR stack doesn't overflow
 L* jtsymbisdel(J jt,A a,A w,A g){
- RZ(a&&w&&g);
+ ARGCHK3(a,w,g);
  I nvrtop=jt->parserstackframe.nvrtop;   // save stack before deletion
  L *ret=symbis(a,w,g);  // perform assignment
  I currtop=jt->parserstackframe.nvrtop;
  while(currtop>nvrtop){  // the only new blocks must be ones that were newly added to the nvr stack by symbis
   --currtop;  // index points to OPEN slot; back up to slot to free
-  A delval=jt->nvrav[currtop];  // block that has been deferred-freed
+  A delval=AAV1(jt->nvra)[currtop];  // block that has been deferred-freed
   AFLAG(delval) &= ~(AFNVR|AFNVRUNFREED); fa(delval);  // in case the block survives, indicate that it is off the stack now; then reduce usecount
  }
  jt->parserstackframe.nvrtop=(US)nvrtop;  // remove additions to nvr stack

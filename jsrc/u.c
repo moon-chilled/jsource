@@ -164,13 +164,13 @@ C cf(A w){if(!w)R 0; R CAV(w)[0];}  // first character in a character array
 C cl(A w){if(!w)R 0; R CAV(w)[AN(w)-1];}  // last character in a character array
 
 // A block for null-terminated C string, with a trailing NUL (which is not included in the AN of the string)
-A jtcstr(J jt,C*s){A z; RZ(z=rifvs(str((I)strlen(s),s))); CAV(z)[AN(z)]=0; R z;}  // used only for initialization, so ensure real string returned.  The string has only the non-NUL, but add a trailing NUL.  There's always room.
+A jtcstr(J jt,C*s){A z; RZ(z=mkwris(str((I)strlen(s),s))); CAV(z)[AN(z)]=0; R z;}  // ensure writable string returned, since we modify it here.  The string has only the non-NUL, but add a trailing NUL.  There's always room.
 
 // Return 1 iff w is the evocation of a name.  w must be a FUNC
 B evoke(A w){V*v=FAV(w); R CTILDE==v->id&&v->fgh[0]&&NAME&AT(v->fgh[0]);}
 
 // Extract the integer value from w, return it.  Set error if non-integral or non-atomic
-I jti0(J jt,A w){RZ(w);
+I jti0(J jt,A w){ARGCHK1(w);
  if(AT(w)&INT+B01){ASSERT(!AR(w),EVRANK); R BIV0(w);}  // INT/B01 quickly
  if(AT(w)&FL){D d=DAV(w)[0]; D e=jround(d); I cval=(I)e;  // FL without call to cvt
   // if an atom is tolerantly equal to integer,  there's a good chance it is exactly equal.
@@ -206,7 +206,7 @@ A jtifb(J jt,I n,B* RESTRICT b){A z;I p,* RESTRICT zv;
 }    /* integer vector from boolean mask */
 
 // i. # w
-static F1(jtii){RZ(w); I j; RETF(IX(SETIC(w,j)));}
+static F1(jtii){ARGCHK1(w); I j; RETF(IX(SETIC(w,j)));}
 
 // Return the higher-priority of the types s and t.  s and t are known to be not equal.
 // If either is sparse, convert the result to sparse.
@@ -217,7 +217,7 @@ static F1(jtii){RZ(w); I j; RETF(IX(SETIC(w,j)));}
 I jtmaxtype(J jt,I s,I t){
  // If values differ and are both nonzero...
  I resultbit = jt->prioritytype[MAX(jt->typepriority[CTTZ(s)],jt->typepriority[CTTZ(t)])];  // Get the higher-priority type
- if(unlikely((s|t)&SPARSE)){ASSERT(!((s|t)&(C2T|C4T|XNUM|RAT|SBT)),EVDOMAIN); R (I)1 << (resultbit+SB01X-B01X);}  // If either operand sparse, return sparse version
+ if(unlikely(((s|t)&SPARSE))!=0){ASSERT(!((s|t)&(C2T|C4T|XNUM|RAT|SBT)),EVDOMAIN); R (I)1 << (resultbit+SB01X-B01X);}  // If either operand sparse, return sparse version
  R (I)1 << resultbit;   // otherwise, return normal version
 }
 
@@ -273,8 +273,11 @@ A jtscx(J jt,X x)    {A z; GAT0(z,XNUM,1,0); XAV(z)[0]=ca(x); RETF(z);}  // scal
 // return A-block for the string *s with length n
 A jtstr(J jt,I n,C*s){A z; GATV0(z,LIT,n,1); MC(AV(z),s,n); RETF(z);}
 
+// return A-block for the string *s with length n, enclosed in quotes and quotes doubled
+A jtstrq(J jt,I n,C*s){A z; I qc=2; DO(n, qc+=s[i]=='\'';) GATV0(z,LIT,n+qc,1); C *zv=CAV(z); *zv++='\''; DO(n, C c=s[i]; if(c=='\'')*zv++=c; *zv++=c;) *zv='\''; RETF(z);}
+
 // w is a LIT string; result is a new block with the same string, with terminating NUL added
-F1(jtstr0){A z;C*x;I n; RZ(w); ASSERT(LIT&AT(w),EVDOMAIN); n=AN(w); GATV0(z,LIT,n+1,1); x=CAV(z); MC(x,AV(w),n); x[n]=0; RETF(z);}
+F1(jtstr0){A z;C*x;I n; ARGCHK1(w); ASSERT(LIT&AT(w),EVDOMAIN); n=AN(w); GATV0(z,LIT,n+1,1); x=CAV(z); MC(x,AV(w),n); x[n]=0; RETF(z);}
 
 // return A-block for a 2-atom integer vector containing a,b
 A jtv2(J jt,I a,I b){A z;I*x; GAT0(z,INT,2,1); x=AV(z); *x++=a; *x=b; RETF(z);}
@@ -360,17 +363,17 @@ for(i=0;i<n<<bplg(t);i++)*p++=!!(*q++);
 #endif
 
 // Convert w to integer if it isn't integer already (the usual conversion errors apply)
-F1(jtvi){RZ(w); R INT&AT(w)?w:cvt(INT,w);}
+F1(jtvi){ARGCHK1(w); R INT&AT(w)?w:cvt(INT,w);}
 
 // Audit w to ensure valid integer value(s).  Error if non-integral.  Result is A block for integer array.  Infinities converted to IMAX/-IMAX
 F1(jtvib){A z;D d,e,*wv;I i,n,*zv;
- RZ(w);
+ ARGCHK1(w);
  if(AT(w)&INT)R RETARG(w);  // handle common non-failing cases quickly: INT and boolean
  if(AT(w)&B01){if(!AR(w))R zeroionei(BAV(w)[0]); R cvt(INT,w);}
  if(w==ainf)R imax;  // sentence words of _ always use the same block, so catch that too
  I p=-IMAX,q=IMAX;
  RANK2T oqr=jt->ranks; RESETRANK;
- if(unlikely(AT(w)&SPARSE))RZ(w=denseit(w));
+ if(unlikely((AT(w)&SPARSE)!=0))RZ(w=denseit(w));
  switch(UNSAFE(AT(w))){
  default:
   if(!(AT(w)&FL))RZ(w=cvt(FL,w));
@@ -391,12 +394,12 @@ F1(jtvib){A z;D d,e,*wv;I i,n,*zv;
 }
 
 // Convert w to integer if needed, and verify every atom is nonnegative
-F1(jtvip){I*v; RZ(w); if(!(INT&AT(w)))RZ(w=cvt(INT,w)); v=AV(w); DQ(AN(w), ASSERT(0<=*v++,EVDOMAIN);); RETF(w);}
+F1(jtvip){I*v; ARGCHK1(w); if(!(INT&AT(w)))RZ(w=cvt(INT,w)); v=AV(w); DQ(AN(w), ASSERT(0<=*v++,EVDOMAIN);); RETF(w);}
 
 // Convert w to string, verify it is a list or atom
-F1(jtvs){RZ(w); ASSERT(1>=AR(w),EVRANK); R LIT&AT(w)?w:cvt(LIT,w);}    
+F1(jtvs){ARGCHK1(w); ASSERT(1>=AR(w),EVRANK); R LIT&AT(w)?w:cvt(LIT,w);}    
      /* verify string */
 
 // Convert w to utf8 string, verify it is a list or atom
-F1(jtvslit){RZ(w); ASSERT(1>=AR(w),EVRANK); R LIT&AT(w)?w:(C2T+C4T)&AT(w)?toutf8(w):cvt(LIT,w);}    
+F1(jtvslit){ARGCHK1(w); ASSERT(1>=AR(w),EVRANK); R LIT&AT(w)?w:(C2T+C4T)&AT(w)?toutf8(w):cvt(LIT,w);}    
      /* verify string */

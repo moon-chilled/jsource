@@ -341,7 +341,7 @@ static I jtconword(J jt,I n,C*s){
 
 // w is string, result is list of boxed strings, one per sentence in string (delimited by control words)
 static F1(jtgetsen){A y,z,*z0,*zv;C*s;I i,j,k=-1,m,n,*v;
- RZ(y=wordil(w));  // split string into words - result block has special format
+ RZ(y=wordil(w)); ASSERT(AM(y)>=0,EVOPENQ) // split string into words - result block has special format
  v=AV(y);   // v-> (index,end+1) for each word; #words neg if last is NB.
  n=AM(y)<<1;  // number of words not including any final NB., times 2 to get  # start/end+1 slots
  GATV0(z,BOX,n>>1,1); z0=zv=AAV(z);  // allocate one box per word
@@ -350,11 +350,11 @@ static F1(jtgetsen){A y,z,*z0,*zv;C*s;I i,j,k=-1,m,n,*v;
   j=v[i]; m=v[1+i]-j;         // j=index, m=length of word
   if(0>k)k=j;              // k=index of start of sentence, set at start or when we have processed a control word
   if(conword(m,j+s)){     // when we hit a control word...
-   if(k<j)RZ(*zv++=rifvs(str(j-k,k+s)));  // if a sentence was in progress, emit it
-   RZ(*zv++=rifvs(str(m,j+s)));           // then emit the control word
+   if(k<j)RZ(*zv++=incorp(str(j-k,k+s)));  // if a sentence was in progress, emit it
+   RZ(*zv++=incorp(str(m,j+s)));           // then emit the control word
    k=-1;           // reset start-of-sentence search
  }}
- if(0<=k)RZ(*zv++=rifvs(str(j+m-k,k+s))); // if there was a final sentence in progress, append it
+ if(0<=k)RZ(*zv++=incorp(str(j+m-k,k+s))); // if there was a final sentence in progress, append it
  R vec(BOX,zv-z0,z0);  // keep only the boxes that we used
 }    /* partition by controls */
 
@@ -371,18 +371,18 @@ static F1(jtgetsen){A y,z,*z0,*zv;C*s;I i,j,k=-1,m,n,*v;
 
 B jtpreparse(J jt,A w,A*zl,A*zc){PROLOG(0004);A c,l,*lv,*v,w0,w1,*wv,x,y;B b=0,try=0;
      C*s;CW*d,*cv;I as=0,i,j,k,m,n,p,q,yn;
- RZ(w);
+ ARGCHK1(w);
  p=AN(w); wv=AAV(w);  // p=#lines, wv->line 0 (a line is a boxed string)
  ASSERT(p<SMAX,EVLIMIT);
  RZ(c=exta(CONW,1L,1L,3*p)); cv=(CW*)AV(c); n=0;  // allocate result area, cv->start of block of CWs, n=#cws encountered
  RZ(l=exta(BOX, 1L,1L,5*p)); lv=    AAV(l); m=0;  // allocate list of boxed words, lv->&A for first word; m=#words
  for(i=0;i<p;++i){   // loop for each line
-  // split the line into a sequence of sentences, splitting on each control word.  Result is a list of boxed strings, each one sentnece
+  // split the line into a sequence of sentences, splitting on each control word.  Result is a list of boxed strings, each one sentence
   RZ(y=getsen(wv[i])); yn=AN(y); v=AAV(y);  // split string into sentences; yn=#sentences on line, v->block for first sentence
   for(j=0;j<yn;++j){   // for each sentence on the line...
    if(n==AN(c)){RZ(c=ext(0,c)); cv=(CW*)AV(c);}  // if result buffer is full, reallocate it, reset pointer to first CW
    w0=v[j];                             // w0 is A block for sentence j
-   RZ(w1=wordil(w0));                   // w1 is A block for (# words), (index,end+1) pairs
+   RZ(w1=wordil(w0)); ASSERT(AM(w1)>=0,EVOPENQ)  // w1 is A block for (# words), (index,end+1) pairs
    s=CAV(str0(w0));                           // s->start of sentence after appending final NUL,  why?
    k=conword(AV(w1)[1]-AV(w1)[0],s);         // classify first word, using its length.  0 means 'not CW', otherwise control type
    if(k==CTRY)try=1;                    // remember if we see a try.
@@ -395,13 +395,13 @@ B jtpreparse(J jt,A w,A*zl,A*zc){PROLOG(0004);A c,l,*lv,*v,w0,w1,*wv,x,y;B b=0,t
    d->go= (((((I)1<<0)|((I)1<<CCONT)|((I)1<<CBREAK)|((I)1<<CCONTS)|((I)1<<CBREAKS)|((I)1<<CTHROW))>>k)&1) ? (US)SMAX : k==CRETURN ? (US)SMAX-1 : (US)(1+n);
    b|=k==CGOTO;                         // remember if we see a goto_.
    // if not cw (ie executable sentence), turn words into an executable queue.  If cw, check for cw with data.  Set x to queue/cw, or 1 if cw w/o data
-   if(!k)RZ(x=enqueue(w1,w0,2)) else x=k==CLABEL||k==CGOTO||k==CFOR?w0:0L;  // FOR must always go out; the length of the name is always needed, even if 0
+   if(!k){RZ(x=enqueue(w1,w0,2))}else{x=k==CLABEL||k==CGOTO||k==CFOR?w0:0L;}  // FOR must always go out; the length of the name is always needed, even if 0
    q=k?1&&x:AN(x);   // q=#words in sentence (1 if cw w/o data; 1 if cw w/data (eg for_x.); #words in sentence otherwise
    ASSERT(q<SMAX,EVLIMIT);
    // append the words (which are a queue or a cw) to the list of words
    if(x){                               // set unless the control word is not needed (it usually isn't)
     while(AN(l)<m+q){RZ(l=ext(0,l)); lv=AAV(l);}  // if word buffer filled, extend it & refresh data pointer
-    if(k)lv[m]=rifvs(x); else ICPY(m+lv,AAV(x),q);   // install word(s): the cw, or the words of the queue
+    if(k)lv[m]=incorp(x); else ICPY(m+lv,AAV(x),q);   // install word(s): the cw, or the words of the queue
    }
    // Now that the words have been moved, install the index to them, and their number, into the cw info; step word pointer over the words added (even if empty spaces)
    d->i=m; d->n=(US)q; m+=q;
@@ -414,7 +414,7 @@ B jtpreparse(J jt,A w,A*zl,A*zc){PROLOG(0004);A c,l,*lv,*v,w0,w1,*wv,x,y;B b=0,t
  // Audit control structures and point the go line correctly
  ASSERTCW(    0>(i= conall(n,cv   )),(i+cv)->source);
  // Install the number of words and cws into the return blocks, and return those blocks
- AN(l)=AS(l)[0]=m; *zl=rifvs(l);
- AN(c)=AS(c)[0]=n; *zc=rifvs(c);
+ AN(l)=AS(l)[0]=m; *zl=incorp(l);
+ AN(c)=AS(c)[0]=n; *zc=incorp(c);
  R try;
 }
